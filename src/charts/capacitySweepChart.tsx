@@ -550,7 +550,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
               </div>
 
               {/* Investment KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
                 <div className="card-flush p-4" style={{ borderRadius: 4 }}>
                   <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Cost per MWh</div>
                   <div className="num text-lg font-display text-[color:var(--accent-amber)]">
@@ -558,15 +558,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                   </div>
                   <div className="text-[10px] font-mono text-[color:var(--text-dim)] mt-1">
                     {batteryCostPerKWh} €/kWh
-                  </div>
-                </div>
-                <div className="card-flush p-4" style={{ borderRadius: 4 }}>
-                  <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Annualised €/MWh</div>
-                  <div className="num text-lg font-display text-[color:var(--accent-amber)]">
-                    {fmtMoney(batteryCostPerKWh * 1000 * crf)}
-                  </div>
-                  <div className="text-[10px] font-mono text-[color:var(--text-dim)] mt-1">
-                    /yr · break-even rate
                   </div>
                 </div>
                 {netOptimum ? (
