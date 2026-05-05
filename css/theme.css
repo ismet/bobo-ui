@@ -77,6 +77,31 @@
     transition: border-color 0.15s;
   }
   input[type=number]:focus, select:focus { border-color: var(--accent-teal); }
+  input[type=date] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    color-scheme: dark;
+  }
+  input[type=date]:focus { border-color: var(--accent-teal); }
+  input[type=date]::-webkit-calendar-picker-indicator {
+    filter: invert(0.82) sepia(8%) saturate(340%) hue-rotate(182deg) brightness(102%) contrast(90%);
+    cursor: pointer;
+    opacity: 0.9;
+  }
+  input[type=date]::-webkit-datetime-edit,
+  input[type=date]::-webkit-datetime-edit-text,
+  input[type=date]::-webkit-datetime-edit-month-field,
+  input[type=date]::-webkit-datetime-edit-day-field,
+  input[type=date]::-webkit-datetime-edit-year-field {
+    color: var(--text);
+  }
   /* remove default number arrows for cleaner look */
   input[type=number]::-webkit-outer-spin-button,
   input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }

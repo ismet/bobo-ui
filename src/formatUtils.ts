@@ -98,7 +98,7 @@ export function boboDefaultDateRange(): { startDate: string; endDate: string } {
   end.setHours(0, 0, 0, 0);
   end.setDate(end.getDate() - 1);
   const start = new Date(end);
-  start.setFullYear(start.getFullYear() - 1);
+  start.setDate(start.getDate() - 7);
   return { startDate: formatLocalYMD(start), endDate: formatLocalYMD(end) };
 }
 

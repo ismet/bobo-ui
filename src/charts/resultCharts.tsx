@@ -44,10 +44,10 @@ export function Footer() {
   );
 }
 
-export function MarketOverview({ price, wind, horizon }: {
+export function MarketOverview({ price, wind, dateRangeLabel }: {
   price: number[];
   wind: number[];
-  horizon: string;
+  dateRangeLabel: string;
 }) {
   const stats = useMemo(() => {
     const n = price.length;
@@ -71,7 +71,7 @@ export function MarketOverview({ price, wind, horizon }: {
 
   return (
     <div className="mt-6 card p-5">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-3">Site signals · {horizon}</div>
+      <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-3">Site signals · {dateRangeLabel}</div>
       <div className="grid grid-cols-2 gap-3 text-sm font-mono">
         <div>
           <div className="text-[10px] text-[color:var(--text-faint)] uppercase">Avg price</div>
@@ -157,7 +157,7 @@ export function KPIRow({ result }: { result: OptimizationRunResult }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
       <KPI label="Hybrid revenue (optimized dispatch)"  value={fmtMoney(stats.totalRev)}
-           sub={`${result.horizon} horizon`} tone="teal"/>
+           sub={result.dateRangeLabel} tone="teal"/>
       <KPI label="Plant-only revenue" value={fmtMoney(stats.windOnlyRev)}
            sub="no BESS" tone="amber"/>
       <KPI label="Incremental revenue from BESS" value={fmtMoney(stats.uplift)}

@@ -241,6 +241,8 @@ export function DataInputCard({
   onClearBoboInflight,
   powerPlants, plantsLoading, plantsError,
   seriesLoading, selectedPlantId, onPickPlant,
+  boboStartDate, boboEndDate, onBoboStartDateChange, onBoboEndDateChange,
+  onApplyPlantRange, canApplyPlantRange,
   boboSeriesError
 }: {
   customData: { price: number[]; wind: number[] } | null;
@@ -253,6 +255,12 @@ export function DataInputCard({
   seriesLoading: boolean;
   selectedPlantId: string | null;
   onPickPlant: (id: string | number) => void;
+  boboStartDate: string;
+  boboEndDate: string;
+  onBoboStartDateChange: (value: string) => void;
+  onBoboEndDateChange: (value: string) => void;
+  onApplyPlantRange: () => void;
+  canApplyPlantRange: boolean;
   boboSeriesError: string | null;
 }) {
   const [tab, setTab] = useState('paste'); // 'paste' | 'upload'
@@ -322,6 +330,15 @@ export function DataInputCard({
     width: '100%', resize: 'vertical', outline: 'none',
     marginTop: 6, marginBottom: 12
   };
+  const yesterday = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
 
   const tabBtn = (key: string, label: string) => {
     const active = tab === key;
@@ -366,6 +383,42 @@ export function DataInputCard({
         selectedPlantId={selectedPlantId}
         onPickPlant={onPickPlant}
       />
+      <div className="mb-4">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">
+            Start date
+            <input
+              type="date"
+              value={boboStartDate}
+              max={boboEndDate || yesterday}
+              onChange={(e) => onBoboStartDateChange(e.target.value)}
+              className="mt-1 w-full border border-[color:var(--border)] bg-[color:var(--bg)] px-2 py-2 text-xs text-[color:var(--text)] font-mono"
+            />
+          </label>
+          <label className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">
+            End date
+            <input
+              type="date"
+              value={boboEndDate}
+              min={boboStartDate}
+              max={yesterday}
+              onChange={(e) => onBoboEndDateChange(e.target.value)}
+              className="mt-1 w-full border border-[color:var(--border)] bg-[color:var(--bg)] px-2 py-2 text-xs text-[color:var(--text)] font-mono"
+            />
+          </label>
+        </div>
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={onApplyPlantRange}
+            disabled={seriesLoading || !canApplyPlantRange}
+            className="btn-primary w-full"
+            style={{ opacity: seriesLoading || !canApplyPlantRange ? 0.6 : 1 }}
+          >
+            {seriesLoading ? 'Applying...' : 'Apply plant + date range'}
+          </button>
+        </div>
+      </div>
       {boboSeriesError && (
         <div className="mb-4 text-xs font-mono" style={{ color: 'var(--accent-rose)' }}>
           Power plant data: {boboSeriesError}

@@ -21,12 +21,13 @@ import { OutputTable } from './tables/outputTable';
 import { PRICE_DATA, WIND_DATA } from './data/constants';
 import {
   boboDefaultDateRange,
+  formatLocalYMD,
   fingerprintSeriesSample,
   normalizePowerPlantsPayload,
 } from './formatUtils';
 import { runOptimizationDelegated } from './engine/optimizationRunner';
 import type { OptimizationParams } from './engine/types';
-import type { HorizonKey, OptimizationRunResult } from './optimizationTypes';
+import type { OptimizationRunResult } from './optimizationTypes';
 import { SectionHeader, Slider } from './uiPrimitives';
 
 export default function App() {
@@ -38,7 +39,6 @@ export default function App() {
   const [dischargeEff, setDischargeEff] = useState(0.95); // frac
   const [windScale,    setWindScale]    = useState(1.0);
   const [initialSOC,   setInitialSOC]   = useState(0.5);
-  const [horizon,      setHorizon]      = useState<HorizonKey>('week');
   const [systemDesignOpen, setSystemDesignOpen] = useState(true);
 
   // Time step in hours (1.0 = hourly, 0.25 = 15 min, 0.5 = 30 min, etc.)
@@ -88,6 +88,10 @@ export default function App() {
   // User-pasted dataset (null = use embedded default)
   const [customData, setCustomData] = useState<SeriesData | null>(null);
   const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null);
+  const initialBoboDateRange = useMemo(() => boboDefaultDateRange(), []);
+  const [boboStartDate, setBoboStartDate] = useState(initialBoboDateRange.startDate);
+  const [boboEndDate, setBoboEndDate] = useState(initialBoboDateRange.endDate);
+  const [hasUnappliedChanges, setHasUnappliedChanges] = useState(true);
 
   const setCustomDataWithSource = useCallback((data: SeriesData | null, fromBobo = false) => {
     if (data === null || !fromBobo) setSelectedPlantId(null);
@@ -133,15 +137,13 @@ export default function App() {
 
   useEffect(() => () => { seriesAbortRef.current?.abort(); }, []);
 
-  const handlePickPlant = useCallback(async (id: string | number) => {
+  const fetchPlantSeries = useCallback(async (id: string | number, startDate: string, endDate: string) => {
     const gen = ++seriesFetchGenRef.current;
     seriesAbortRef.current?.abort();
     const ac = new AbortController();
     seriesAbortRef.current = ac;
     setSeriesLoading(true);
     setBoboSeriesError(null);
-    setSelectedPlantId(String(id));
-    const { startDate, endDate } = boboDefaultDateRange();
     const url = 'https://bobo-api.onrender.com/power-plants/' + encodeURIComponent(id)
       + '/prices-and-generation?start_date=' + encodeURIComponent(startDate)
       + '&end_date=' + encodeURIComponent(endDate);
@@ -161,10 +163,10 @@ export default function App() {
         throw new Error('Non-finite values in series');
       }
       setCustomDataWithSource({ price, wind }, true);
+      setHasUnappliedChanges(false);
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return;
       setBoboSeriesError(e instanceof Error ? e.message : String(e));
-      setSelectedPlantId(null);
     } finally {
       if (seriesFetchGenRef.current === gen) {
         seriesAbortRef.current = null;
@@ -172,6 +174,33 @@ export default function App() {
       }
     }
   }, [setCustomDataWithSource]);
+
+  const handlePickPlant = useCallback((id: string | number) => {
+    setSelectedPlantId(String(id));
+    setBoboSeriesError(null);
+    setHasUnappliedChanges(true);
+  }, []);
+
+  const handleApplyPlantRange = useCallback(async () => {
+    if (seriesLoading) return;
+    if (!selectedPlantId) {
+      setBoboSeriesError('Select a power plant before applying date range.');
+      return;
+    }
+    const yesterday = new Date();
+    yesterday.setHours(0, 0, 0, 0);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const maxDate = formatLocalYMD(yesterday);
+    if (boboStartDate > boboEndDate) {
+      setBoboSeriesError('Start date must be before or equal to end date.');
+      return;
+    }
+    if (boboStartDate > maxDate || boboEndDate > maxDate) {
+      setBoboSeriesError('Date range cannot include today or future dates.');
+      return;
+    }
+    await fetchPlantSeries(selectedPlantId, boboStartDate, boboEndDate);
+  }, [seriesLoading, selectedPlantId, boboStartDate, boboEndDate, fetchPlantSeries]);
 
   const [result, setResult] = useState<OptimizationRunResult | null>(null);
   const [running, setRunning] = useState(false);
@@ -182,10 +211,9 @@ export default function App() {
   const activeWind  = useMemo(() => customData ? customData.wind  : WIND_DATA,  [customData]);
   const availableHours = activePrice.length * dt;          // total hours covered by dataset
   const availableSteps = activePrice.length;               // raw point count
-
-  const horizonRequestedH: Record<HorizonKey, number> = { week: 168, month: 720, quarter: 2160, year: 8760 };
-  const horizonHours = Math.min(horizonRequestedH[horizon], availableHours);
-  const horizonSteps = Math.round(horizonHours / dt);      // number of points to feed DP
+  const horizonHours = availableHours;
+  const horizonSteps = availableSteps;
+  const dateRangeLabel = selectedPlantId ? `${boboStartDate} -> ${boboEndDate}` : 'Loaded dataset';
 
   // Slice data
   const pricePeriod = useMemo(() => activePrice.slice(0, horizonSteps), [activePrice, horizonSteps]);
@@ -219,7 +247,7 @@ export default function App() {
         ms: workerMs,
         ipcOverheadMs: Math.max(0, wallMs - workerMs),
         usedWorker,
-        horizon,
+        dateRangeLabel,
         dt
       });
     } catch (e) {
@@ -229,14 +257,14 @@ export default function App() {
       if (optimGenRef.current === gen) setRunning(false);
     }
   }, [capacity, chargeMax, dischargeMax, chargeEff, dischargeEff,
-      initialSOC, pricePeriod, windPeriod, horizon, dt, targetDsoc, chargeFromGrid,
+      initialSOC, pricePeriod, windPeriod, dateRangeLabel, dt, targetDsoc, chargeFromGrid,
       wearCost]);
 
-  // auto run on mount, when horizon changes, when dataset loads,
+  // auto run on mount, when dataset loads,
   // when dt changes, when grid resolution changes, charge source changes,
   // or wear cost changes.
   useEffect(() => { runOptim(); /* eslint-disable-next-line */ },
-    [horizon, customData, dt, targetDsoc, chargeFromGrid, wearCost]);
+    [customData, dt, targetDsoc, chargeFromGrid, wearCost]);
 
   return (
     <div className="min-h-screen">
@@ -394,28 +422,11 @@ export default function App() {
               </div>
               <div className="hairline my-4"></div>
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Horizon</div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Loaded horizon</div>
                   <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
                     {horizonHours.toLocaleString()}h · {horizonSteps.toLocaleString()} steps
                   </div>
-                </div>
-                <div className="grid grid-cols-4 gap-1 mb-4">
-                  {([['week', '1 wk', 168], ['month', '1 mo', 720], ['quarter', '3 mo', 2160], ['year', '1 yr', 8760]] as const).map(([k, lbl, h]) => {
-                    const disabled = availableHours < 24 || (availableHours < h && k !== 'week' && availableHours < 168);
-                    return (
-                      <button key={k} onClick={() => setHorizon(k as HorizonKey)}
-                        disabled={disabled}
-                        title={disabled ? `need ≥${h}h of data` : ''}
-                        className={`py-2 text-xs font-mono border transition-colors ${
-                          horizon === k
-                            ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
-                            : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
-                        }`}
-                        style={disabled ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
-                      >{lbl}</button>
-                    );
-                  })}
                 </div>
                 <button onClick={runOptim} disabled={running}
                         className="btn-primary w-full flex items-center justify-center gap-2">
@@ -435,6 +446,12 @@ export default function App() {
               seriesLoading={seriesLoading}
               selectedPlantId={selectedPlantId}
               onPickPlant={handlePickPlant}
+              boboStartDate={boboStartDate}
+              boboEndDate={boboEndDate}
+              onBoboStartDateChange={(v: string) => { setBoboStartDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
+              onBoboEndDateChange={(v: string) => { setBoboEndDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
+              onApplyPlantRange={handleApplyPlantRange}
+              canApplyPlantRange={hasUnappliedChanges}
               boboSeriesError={boboSeriesError}
             />
             <EconomicsCard
@@ -455,7 +472,7 @@ export default function App() {
               capacity={capacity}
               batteryCostPerKWh={batteryCostPerKWh}
             />
-            <MarketOverview price={pricePeriod} wind={windPeriod} horizon={horizon} />
+            <MarketOverview price={pricePeriod} wind={windPeriod} dateRangeLabel={dateRangeLabel} />
           </aside>
           )}
 
@@ -526,7 +543,6 @@ export default function App() {
                   baseWind={result.windPeriod}
                   baseParams={result.params}
                   dt={result.dt}
-                  horizon={result.horizon}
                   batteryCostPerKWh={batteryCostPerKWh}
                   crf={crf}
                   interestRatePct={interestRatePct}

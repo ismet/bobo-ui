@@ -6,7 +6,6 @@ import { fmtMoney, fmtNumber } from '../formatUtils';
 import { buildFadeCurve } from '../panels/economicsDegradation';
 import { runOptimizationDelegated } from '../engine/optimizationRunner';
 import type { OptimizationParams, Trajectory } from '../engine/types';
-import type { HorizonKey } from '../optimizationTypes';
 
 // ============================================================================
 // CAPACITY SWEEP CHART — re-runs the optimiser at multiple battery capacities
@@ -32,14 +31,13 @@ type SweepPoint = {
 
 type SweepResults = { points: SweepPoint[]; scalePower: boolean };
 
-export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt, horizon,
+export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                               batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
                               yearOneFadePct, longTermFadePct }: {
   basePrice: number[];
   baseWind: number[];
   baseParams: OptimizationParams;
   dt: number;
-  horizon: HorizonKey;
   batteryCostPerKWh: number;
   crf: number;
   interestRatePct: number;
@@ -326,7 +324,7 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt, horizo
             Run {pointCount + 1} dispatch optimizations (by MWh size)
           </div>
           <div className="text-[10px] text-[color:var(--text-faint)]">
-            Rough runtime ~{(pointCount + 1) * (horizon === 'year' ? 1.5 : horizon === 'quarter' ? 0.4 : 0.05)}s · {horizon} horizon
+            Rough runtime ~{((pointCount + 1) * Math.max(0.05, (basePrice.length * dt) / 8000)).toFixed(1)}s
           </div>
         </div>
       )}
