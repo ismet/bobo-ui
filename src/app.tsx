@@ -553,7 +553,7 @@ export default function App() {
                       Pending changes
                     </div>
                   )}
-                  <button onClick={optimize} disabled={running || !hasPendingChanges}
+                  <button onClick={optimize} disabled={running}
                     className="btn-primary w-full flex items-center justify-center gap-2">
                     {running ? <><span className="spinner"></span> Optimizing dispatch…</> : <>Optimize dispatch ↗</>}
                   </button>
