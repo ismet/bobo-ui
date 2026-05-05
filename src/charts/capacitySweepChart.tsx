@@ -32,21 +32,21 @@ type SweepPoint = {
 type SweepResults = { points: SweepPoint[]; scalePower: boolean };
 
 export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
-                              batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
-                              yearOneFadePct, longTermFadePct }: {
-  basePrice: number[];
-  baseWind: number[];
-  baseParams: OptimizationParams;
-  dt: number;
-  batteryCostPerKWh: number;
-  crf: number;
-  interestRatePct: number;
-  lifetimeYears: number;
-  yearOneFadePct: number;
-  longTermFadePct: number;
-}) {
-  const [results, setResults]   = useState<SweepResults | null>(null);
-  const [running, setRunning]   = useState(false);
+  batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
+  yearOneFadePct, longTermFadePct }: {
+    basePrice: number[];
+    baseWind: number[];
+    baseParams: OptimizationParams;
+    dt: number;
+    batteryCostPerKWh: number;
+    crf: number;
+    interestRatePct: number;
+    lifetimeYears: number;
+    yearOneFadePct: number;
+    longTermFadePct: number;
+  }) {
+  const [results, setResults] = useState<SweepResults | null>(null);
+  const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);          // 0..1
   const [scalePower, setScalePower] = useState(false);  // 1C scaling toggle
   const [maxCapacityX, setMaxCapacityX] = useState(4);  // sweep up to N× current cap
@@ -93,10 +93,10 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
           // Scale charge/discharge limits proportionally if the user wants
           // 1C-style sizing (more MWh ⇒ more MW). Otherwise hold them at the
           // sidebar values, answering "given my inverter, how many MWh?"
-          const cMax = scalePower ? cap * (baseParams.chargeMax    / baseParams.capacity)
-                                  : baseParams.chargeMax;
+          const cMax = scalePower ? cap * (baseParams.chargeMax / baseParams.capacity)
+            : baseParams.chargeMax;
           const dMax = scalePower ? cap * (baseParams.dischargeMax / baseParams.capacity)
-                                  : baseParams.dischargeMax;
+            : baseParams.dischargeMax;
           const params = { ...baseParams, capacity: cap, chargeMax: cMax, dischargeMax: dMax };
           const { traj } = await runOptimizationDelegated(basePrice, baseWind, params);
           if (sweepGenRef.current !== gen) return;
@@ -104,9 +104,9 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
         }
         out.push({
           capacity: cap,
-          revenue:  totalRev,
+          revenue: totalRev,
           baseline: baseRevenue,
-          uplift:   totalRev - baseRevenue,
+          uplift: totalRev - baseRevenue,
           upliftPct: baseRevenue > 0 ? ((totalRev - baseRevenue) / baseRevenue) * 100 : 0,
           marginalEurPerMWh: 0,
         });
@@ -121,7 +121,7 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
           out[i].marginalEurPerMWh = 0;
         } else {
           const dCap = out[i].capacity - out[i - 1].capacity;
-          const dUp  = out[i].uplift   - out[i - 1].uplift;
+          const dUp = out[i].uplift - out[i - 1].uplift;
           out[i].marginalEurPerMWh = dCap > 0 ? dUp / dCap : 0;
         }
       }
@@ -158,16 +158,16 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
     return results.points.map(p => {
       // Year-1 uplift, extrapolated from the simulated horizon.
       // (With Option A active, p.uplift is already net of wear cost.)
-      const annualRevenue   = p.revenue * periodToAnnual;
-      const yearOneUplift   = p.uplift  * periodToAnnual;
+      const annualRevenue = p.revenue * periodToAnnual;
+      const yearOneUplift = p.uplift * periodToAnnual;
       // Levelised annual uplift over the lifetime, with capacity fade & NPV.
-      const annualUplift    = yearOneUplift * fadeNpvFactor;
+      const annualUplift = yearOneUplift * fadeNpvFactor;
       // CAPEX in € (cost is in €/kWh, capacity in MWh)
-      const capex           = p.capacity * 1000 * batteryCostPerKWh;
-      const annualCapex     = capex * crf;
-      const netAnnual       = annualUplift - annualCapex;
+      const capex = p.capacity * 1000 * batteryCostPerKWh;
+      const annualCapex = capex * crf;
+      const netAnnual = annualUplift - annualCapex;
       // Simple payback uses year-1 (no-fade) cash flow — comparable across runs.
-      const simplePayback   = yearOneUplift > 0 ? capex / yearOneUplift : Infinity;
+      const simplePayback = yearOneUplift > 0 ? capex / yearOneUplift : Infinity;
       return {
         ...p,
         annualRevenue, yearOneUplift, annualUplift,
@@ -228,12 +228,12 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
     let cumDiscRev = 0;
     for (let y = 1; y <= lifetimeYears; y++) {
       const retStart = fadeCurve[y - 1];
-      const retEnd   = fadeCurve[y];
-      const retAvg   = (retStart + retEnd) / 2;
-      const yearRev  = breakdownAnchor.yearOneUplift * retAvg;       // €/yr at year y
-      const discFac  = 1 / Math.pow(1 + i, y);                       // 1/(1+i)^y
-      const discRev  = yearRev * discFac;                            // PV of year y revenue
-      cumDiscRev    += discRev;
+      const retEnd = fadeCurve[y];
+      const retAvg = (retStart + retEnd) / 2;
+      const yearRev = breakdownAnchor.yearOneUplift * retAvg;       // €/yr at year y
+      const discFac = 1 / Math.pow(1 + i, y);                       // 1/(1+i)^y
+      const discRev = yearRev * discFac;                            // PV of year y revenue
+      cumDiscRev += discRev;
       rows.push({
         year: y,
         retStart, retEnd, retAvg,
@@ -252,12 +252,12 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
     if (!results || results.points.length < 3) return null;
     const pts = results.points;
     const startMarg = pts[1]!.marginalEurPerMWh;
-    const endMarg   = pts[pts.length - 1]!.marginalEurPerMWh;
+    const endMarg = pts[pts.length - 1]!.marginalEurPerMWh;
     if (startMarg <= 0) return null;
     const ratio = endMarg / startMarg;
-    if (ratio > 0.85) return { kind: 'linear',     startMarg, endMarg, ratio };
+    if (ratio > 0.85) return { kind: 'linear', startMarg, endMarg, ratio };
     if (ratio > 0.10) return { kind: 'saturating', startMarg, endMarg, ratio };
-    return                        { kind: 'saturated',  startMarg, endMarg, ratio };
+    return { kind: 'saturated', startMarg, endMarg, ratio };
   }, [results]);
 
   return (
@@ -271,22 +271,22 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
           </div>
         </div>
         <button onClick={runSweep} disabled={running}
-                className="btn-primary"
-                style={{ padding: '10px 18px', fontSize: 13 }}>
-          {running ? <span style={{display:'inline-flex',alignItems:'center',gap:8}}>
-                       <span className="spinner"></span>
-                       sweeping dispatch… {(progress*100).toFixed(0)}%
-                     </span>
-                   : <>Run sizing sweep ↗</>}
+          className="btn-primary"
+          style={{ padding: '10px 18px', fontSize: 13 }}>
+          {running ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span className="spinner"></span>
+            sweeping dispatch… {(progress * 100).toFixed(0)}%
+          </span>
+            : <>Run sizing sweep ↗</>}
         </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 mb-4 text-xs font-mono">
         <label className="flex items-center gap-2 text-[color:var(--text-dim)]"
-               style={{ cursor: 'pointer' }}>
+          style={{ cursor: 'pointer' }}>
           <input type="checkbox" checked={scalePower}
-                 onChange={e => setScalePower(e.target.checked)}
-                 style={{ accentColor: 'var(--accent-teal)' }}/>
+            onChange={e => setScalePower(e.target.checked)}
+            style={{ accentColor: 'var(--accent-teal)' }} />
           <span>scale power with storage size</span>
           <span className="text-[color:var(--text-faint)]">·
             {scalePower
@@ -374,22 +374,21 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
           {regime && (
             <div className="mb-5" style={{
               padding: '12px 16px',
-              borderLeft: `3px solid ${
-                regime.kind === 'saturated'  ? 'var(--accent-rose)'  :
-                regime.kind === 'saturating' ? 'var(--accent-amber)' :
-                                               'var(--accent-teal)'
-              }`,
+              borderLeft: `3px solid ${regime.kind === 'saturated' ? 'var(--accent-rose)' :
+                  regime.kind === 'saturating' ? 'var(--accent-amber)' :
+                    'var(--accent-teal)'
+                }`,
               background: 'var(--surface)', borderRadius: 4,
             }}>
               <div className="text-[10px] uppercase tracking-[0.15em] font-mono mb-1.5"
-                   style={{
-                     color: regime.kind === 'saturated'  ? 'var(--accent-rose)'  :
-                            regime.kind === 'saturating' ? 'var(--accent-amber)' :
-                                                           'var(--accent-teal)'
-                   }}>
-                {regime.kind === 'saturated'  ? '◆ Flattening — extra storage adds little'  :
-                 regime.kind === 'saturating' ? '◆ Diminishing returns — each MWh matters less' :
-                                                '◆ Steady climb — more storage still pays'}
+                style={{
+                  color: regime.kind === 'saturated' ? 'var(--accent-rose)' :
+                    regime.kind === 'saturating' ? 'var(--accent-amber)' :
+                      'var(--accent-teal)'
+                }}>
+                {regime.kind === 'saturated' ? '◆ Flattening — extra storage adds little' :
+                  regime.kind === 'saturating' ? '◆ Diminishing returns — each MWh matters less' :
+                    '◆ Steady climb — more storage still pays'}
               </div>
               <div className="text-xs text-[color:var(--text-dim)]" style={{ lineHeight: 1.55 }}>
                 {regime.kind === 'linear' && (
@@ -397,10 +396,10 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                     Extra revenue per added MWh stays high across the range (only about {((1 - regime.ratio) * 100).toFixed(0)}% softer at the top).
                     {scalePower ? (
                       <> Power scales with energy here, so larger plants can keep using the market.
-                      Turn off &ldquo;scale power with storage size&rdquo; to see how a fixed connection behaves.</>
+                        Turn off &ldquo;scale power with storage size&rdquo; to see how a fixed connection behaves.</>
                     ) : (
                       <> With charge and discharge limits fixed, wide price spreads can keep rewarding more storage.
-                      A longer study period may show the curve bending.</>
+                        A longer study period may show the curve bending.</>
                     )}
                   </>
                 )}
@@ -427,28 +426,34 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
               <ComposedChart data={results.points} margin={{ top: 5, right: 16, left: 10, bottom: 16 }}>
                 <defs>
                   <linearGradient id="capUpliftGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent-teal)" stopOpacity={0.4}/>
-                    <stop offset="100%" stopColor="var(--accent-teal)" stopOpacity={0.02}/>
+                    <stop offset="0%" stopColor="var(--accent-teal)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="var(--accent-teal)" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
+                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                 <XAxis type="number" dataKey="capacity"
-                       domain={[0, 'dataMax']}
-                       tickFormatter={v => `${v.toFixed(0)}`}
-                       stroke="var(--text-faint)"
-                       label={{ value: 'battery capacity (MWh)', position: 'insideBottom',
-                                offset: -8, fill: 'var(--text-faint)', fontSize: 10,
-                                fontFamily: 'JetBrains Mono' }}/>
+                  domain={[0, 'dataMax']}
+                  tickFormatter={v => `${v.toFixed(0)}`}
+                  stroke="var(--text-faint)"
+                  label={{
+                    value: 'battery capacity (MWh)', position: 'insideBottom',
+                    offset: -8, fill: 'var(--text-faint)', fontSize: 10,
+                    fontFamily: 'JetBrains Mono'
+                  }} />
                 <YAxis yAxisId="left" stroke="var(--text-faint)" width={64}
-                       tickFormatter={v => fmtMoney(v)}
-                       label={{ value: 'uplift (€)', angle: -90, position: 'insideLeft',
-                                fill: 'var(--text-faint)', fontSize: 10,
-                                fontFamily: 'JetBrains Mono' }}/>
+                  tickFormatter={v => fmtMoney(v)}
+                  label={{
+                    value: 'uplift (€)', angle: -90, position: 'insideLeft',
+                    fill: 'var(--text-faint)', fontSize: 10,
+                    fontFamily: 'JetBrains Mono'
+                  }} />
                 <YAxis yAxisId="right" orientation="right" stroke="var(--text-faint)" width={50}
-                       tickFormatter={v => `${v.toFixed(0)}%`}
-                       label={{ value: '% vs base', angle: 90, position: 'insideRight',
-                                fill: 'var(--text-faint)', fontSize: 10,
-                                fontFamily: 'JetBrains Mono' }}/>
+                  tickFormatter={v => `${v.toFixed(0)}%`}
+                  label={{
+                    value: '% vs base', angle: 90, position: 'insideRight',
+                    fill: 'var(--text-faint)', fontSize: 10,
+                    fontFamily: 'JetBrains Mono'
+                  }} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload || !payload.length) return null;
@@ -459,51 +464,59 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                         borderRadius: 4, padding: '10px 14px',
                         fontFamily: 'JetBrains Mono, monospace', fontSize: 11
                       }}>
-                        <div style={{ color: 'var(--text-dim)', marginBottom: 6,
-                                      fontSize: 10, letterSpacing: '0.05em',
-                                      textTransform: 'uppercase' }}>
+                        <div style={{
+                          color: 'var(--text-dim)', marginBottom: 6,
+                          fontSize: 10, letterSpacing: '0.05em',
+                          textTransform: 'uppercase'
+                        }}>
                           {p.capacity.toFixed(1)} MWh battery
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto',
-                                      gap: '2px 16px' }}>
+                        <div style={{
+                          display: 'grid', gridTemplateColumns: 'auto auto',
+                          gap: '2px 16px'
+                        }}>
                           <span style={{ color: 'var(--accent-teal)' }}>uplift €</span>
-                          <span style={{ textAlign:'right' }}>{fmtMoney(p.uplift)}</span>
+                          <span style={{ textAlign: 'right' }}>{fmtMoney(p.uplift)}</span>
                           <span style={{ color: 'var(--accent-violet)' }}>uplift %</span>
-                          <span style={{ textAlign:'right' }}>{p.upliftPct.toFixed(2)}%</span>
+                          <span style={{ textAlign: 'right' }}>{p.upliftPct.toFixed(2)}%</span>
                           <span style={{ color: 'var(--accent-green)' }}>extra € / MWh</span>
-                          <span style={{ textAlign:'right' }}>{fmtMoney(p.marginalEurPerMWh)}</span>
+                          <span style={{ textAlign: 'right' }}>{fmtMoney(p.marginalEurPerMWh)}</span>
                           <span style={{ color: 'var(--text-faint)' }}>total revenue</span>
-                          <span style={{ textAlign:'right' }}>{fmtMoney(p.revenue)}</span>
+                          <span style={{ textAlign: 'right' }}>{fmtMoney(p.revenue)}</span>
                         </div>
                       </div>
                     );
                   }}
                 />
                 <Area yAxisId="left" type="monotone" dataKey="uplift"
-                      name="uplift (€)"
-                      fill="url(#capUpliftGrad)"
-                      stroke="var(--accent-teal)" strokeWidth={2}
-                      dot={{ fill: 'var(--accent-teal)', r: 3, strokeWidth: 0 }}
-                      activeDot={{ r: 5 }}/>
+                  name="uplift (€)"
+                  fill="url(#capUpliftGrad)"
+                  stroke="var(--accent-teal)" strokeWidth={2}
+                  dot={{ fill: 'var(--accent-teal)', r: 3, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }} />
                 <Line yAxisId="right" type="monotone" dataKey="upliftPct"
-                      name="uplift %"
-                      stroke="var(--accent-violet)" strokeWidth={1.5}
-                      strokeDasharray="4 4"
-                      dot={{ fill: 'var(--accent-violet)', r: 2.5, strokeWidth: 0 }}/>
+                  name="uplift %"
+                  stroke="var(--accent-violet)" strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={{ fill: 'var(--accent-violet)', r: 2.5, strokeWidth: 0 }} />
                 {sweetSpot && (
                   <ReferenceLine yAxisId="left" x={sweetSpot.capacity}
-                                 stroke="var(--accent-green)" strokeDasharray="2 4"
-                                 strokeWidth={1.2}
-                                 label={{ value: 'best per MWh',
-                                          position: 'top', fill: 'var(--accent-green)',
-                                          fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
+                    stroke="var(--accent-green)" strokeDasharray="2 4"
+                    strokeWidth={1.2}
+                    label={{
+                      value: 'best per MWh',
+                      position: 'top', fill: 'var(--accent-green)',
+                      fontSize: 10, fontFamily: 'JetBrains Mono'
+                    }} />
                 )}
                 <ReferenceLine yAxisId="left" x={baseParams.capacity}
-                               stroke="var(--text-faint)" strokeDasharray="2 4"
-                               strokeWidth={1}
-                               label={{ value: 'current size',
-                                        position: 'top', fill: 'var(--text-faint)',
-                                        fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
+                  stroke="var(--text-faint)" strokeDasharray="2 4"
+                  strokeWidth={1}
+                  label={{
+                    value: 'current size',
+                    position: 'top', fill: 'var(--text-faint)',
+                    fontSize: 10, fontFamily: 'JetBrains Mono'
+                  }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -511,8 +524,10 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
           <div className="flex flex-wrap gap-4 mt-3 text-[10px] font-mono text-[color:var(--text-dim)]">
             <span className="flex items-center gap-1.5"><span className="inline-block w-3" style={{ height: 2, background: 'var(--accent-teal)' }}></span> uplift €</span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3" style={{ height: 1.5, background: 'var(--accent-violet)',
-                    backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-violet) 0 3px, transparent 3px 6px)' }}></span>
+              <span className="inline-block w-3" style={{
+                height: 1.5, background: 'var(--accent-violet)',
+                backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-violet) 0 3px, transparent 3px 6px)'
+              }}></span>
               uplift %
             </span>
             <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-px" style={{ background: 'var(--accent-green)' }}></span> marker · strongest uplift per MWh</span>
@@ -581,7 +596,7 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                     borderLeft: '3px solid var(--accent-rose)'
                   }}>
                     <div className="text-[10px] uppercase tracking-[0.15em] font-mono mb-1"
-                         style={{ color: 'var(--accent-rose)' }}>
+                      style={{ color: 'var(--accent-rose)' }}>
                       No profitable size in this range
                     </div>
                     <div className="text-xs font-mono text-[color:var(--text-dim)]" style={{ lineHeight: 1.5 }}>
@@ -599,23 +614,27 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                   <ComposedChart data={financePoints} margin={{ top: 5, right: 16, left: 10, bottom: 16 }}>
                     <defs>
                       <linearGradient id="netBenefitPos" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accent-green)" stopOpacity={0.4}/>
-                        <stop offset="100%" stopColor="var(--accent-green)" stopOpacity={0.02}/>
+                        <stop offset="0%" stopColor="var(--accent-green)" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="var(--accent-green)" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
+                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                     <XAxis type="number" dataKey="capacity"
-                           domain={[0, 'dataMax']}
-                           tickFormatter={v => `${v.toFixed(0)}`}
-                           stroke="var(--text-faint)"
-                           label={{ value: 'battery capacity (MWh)', position: 'insideBottom',
-                                    offset: -8, fill: 'var(--text-faint)', fontSize: 10,
-                                    fontFamily: 'JetBrains Mono' }}/>
+                      domain={[0, 'dataMax']}
+                      tickFormatter={v => `${v.toFixed(0)}`}
+                      stroke="var(--text-faint)"
+                      label={{
+                        value: 'battery capacity (MWh)', position: 'insideBottom',
+                        offset: -8, fill: 'var(--text-faint)', fontSize: 10,
+                        fontFamily: 'JetBrains Mono'
+                      }} />
                     <YAxis stroke="var(--text-faint)" width={70}
-                           tickFormatter={v => fmtMoney(v)}
-                           label={{ value: '€ / year', angle: -90, position: 'insideLeft',
-                                    fill: 'var(--text-faint)', fontSize: 10,
-                                    fontFamily: 'JetBrains Mono' }}/>
+                      tickFormatter={v => fmtMoney(v)}
+                      label={{
+                        value: '€ / year', angle: -90, position: 'insideLeft',
+                        fill: 'var(--text-faint)', fontSize: 10,
+                        fontFamily: 'JetBrains Mono'
+                      }} />
                     <Tooltip
                       content={({ active, payload }) => {
                         if (!active || !payload || !payload.length) return null;
@@ -626,26 +645,32 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                             borderRadius: 4, padding: '10px 14px',
                             fontFamily: 'JetBrains Mono, monospace', fontSize: 11
                           }}>
-                            <div style={{ color: 'var(--text-dim)', marginBottom: 6,
-                                          fontSize: 10, letterSpacing: '0.05em',
-                                          textTransform: 'uppercase' }}>
+                            <div style={{
+                              color: 'var(--text-dim)', marginBottom: 6,
+                              fontSize: 10, letterSpacing: '0.05em',
+                              textTransform: 'uppercase'
+                            }}>
                               {p.capacity.toFixed(1)} MWh
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'auto auto',
-                                          gap: '2px 16px' }}>
+                            <div style={{
+                              display: 'grid', gridTemplateColumns: 'auto auto',
+                              gap: '2px 16px'
+                            }}>
                               <span style={{ color: 'var(--accent-teal)' }}>annual uplift</span>
-                              <span style={{ textAlign:'right' }}>{fmtMoney(p.annualUplift)}</span>
+                              <span style={{ textAlign: 'right' }}>{fmtMoney(p.annualUplift)}</span>
                               <span style={{ color: 'var(--accent-amber)' }}>annual capex</span>
-                              <span style={{ textAlign:'right' }}>−{fmtMoney(p.annualCapex)}</span>
+                              <span style={{ textAlign: 'right' }}>−{fmtMoney(p.annualCapex)}</span>
                               <span style={{ color: p.netAnnual >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)' }}>net annual</span>
-                              <span style={{ textAlign:'right',
-                                             color: p.netAnnual >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)' }}>
+                              <span style={{
+                                textAlign: 'right',
+                                color: p.netAnnual >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)'
+                              }}>
                                 {fmtMoney(p.netAnnual)}
                               </span>
                               <span style={{ color: 'var(--text-faint)' }}>capex (total)</span>
-                              <span style={{ textAlign:'right' }}>{fmtMoney(p.capex)}</span>
+                              <span style={{ textAlign: 'right' }}>{fmtMoney(p.capex)}</span>
                               <span style={{ color: 'var(--text-faint)' }}>simple payback</span>
-                              <span style={{ textAlign:'right' }}>
+                              <span style={{ textAlign: 'right' }}>
                                 {isFinite(p.simplePayback) ? p.simplePayback.toFixed(1) + ' yr' : '—'}
                               </span>
                             </div>
@@ -653,54 +678,62 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                         );
                       }}
                     />
-                    <ReferenceLine y={0} stroke="var(--border-strong)" strokeDasharray="3 3"/>
+                    <ReferenceLine y={0} stroke="var(--border-strong)" strokeDasharray="3 3" />
                     <Line type="monotone" dataKey="annualUplift" name="annual uplift"
-                          stroke="var(--accent-teal)" strokeWidth={1.5}
-                          strokeDasharray="4 4"
-                          dot={{ fill: 'var(--accent-teal)', r: 2, strokeWidth: 0 }}/>
+                      stroke="var(--accent-teal)" strokeWidth={1.5}
+                      strokeDasharray="4 4"
+                      dot={{ fill: 'var(--accent-teal)', r: 2, strokeWidth: 0 }} />
                     <Line type="monotone" dataKey="annualCapex" name="annual capex (cost)"
-                          stroke="var(--accent-amber)" strokeWidth={1.5}
-                          strokeDasharray="2 4"
-                          dot={false}/>
+                      stroke="var(--accent-amber)" strokeWidth={1.5}
+                      strokeDasharray="2 4"
+                      dot={false} />
                     <Area type="monotone" dataKey="netAnnual" name="net annual benefit"
-                          fill="url(#netBenefitPos)"
-                          stroke="var(--accent-green)" strokeWidth={2.4}
-                          dot={(props) => {
-                            const { cx, cy, payload } = props;
-                            if (!payload || payload.capacity < 1e-6) return <g />;
-                            return (
-                              <circle cx={cx} cy={cy} r={3.5}
-                                fill={payload.netAnnual >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)'}
-                                stroke="none"/>
-                            );
-                          }}/>
+                      fill="url(#netBenefitPos)"
+                      stroke="var(--accent-green)" strokeWidth={2.4}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        if (!payload || payload.capacity < 1e-6) return <g />;
+                        return (
+                          <circle cx={cx} cy={cy} r={3.5}
+                            fill={payload.netAnnual >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)'}
+                            stroke="none" />
+                        );
+                      }} />
                     {netOptimum && (
                       <ReferenceLine x={netOptimum.capacity}
-                                     stroke="var(--accent-green)" strokeDasharray="2 4"
-                                     strokeWidth={1.5}
-                                     label={{ value: `optimum ${netOptimum.capacity.toFixed(0)} MWh`,
-                                              position: 'top', fill: 'var(--accent-green)',
-                                              fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
+                        stroke="var(--accent-green)" strokeDasharray="2 4"
+                        strokeWidth={1.5}
+                        label={{
+                          value: `optimum ${netOptimum.capacity.toFixed(0)} MWh`,
+                          position: 'top', fill: 'var(--accent-green)',
+                          fontSize: 10, fontFamily: 'JetBrains Mono'
+                        }} />
                     )}
                     <ReferenceLine x={baseParams.capacity}
-                                   stroke="var(--text-faint)" strokeDasharray="2 4"
-                                   strokeWidth={1}
-                                   label={{ value: 'current',
-                                            position: 'top', fill: 'var(--text-faint)',
-                                            fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
+                      stroke="var(--text-faint)" strokeDasharray="2 4"
+                      strokeWidth={1}
+                      label={{
+                        value: 'current',
+                        position: 'top', fill: 'var(--text-faint)',
+                        fontSize: 10, fontFamily: 'JetBrains Mono'
+                      }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
 
               <div className="flex flex-wrap gap-4 mt-3 text-[10px] font-mono text-[color:var(--text-dim)]">
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3" style={{ height: 1.5, background: 'var(--accent-teal)',
-                        backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-teal) 0 4px, transparent 4px 8px)' }}></span>
+                  <span className="inline-block w-3" style={{
+                    height: 1.5, background: 'var(--accent-teal)',
+                    backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-teal) 0 4px, transparent 4px 8px)'
+                  }}></span>
                   annual uplift (revenue)
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3" style={{ height: 1.5, background: 'var(--accent-amber)',
-                        backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-amber) 0 2px, transparent 2px 6px)' }}></span>
+                  <span className="inline-block w-3" style={{
+                    height: 1.5, background: 'var(--accent-amber)',
+                    backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-amber) 0 2px, transparent 2px 6px)'
+                  }}></span>
                   annual capex (cost)
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -721,7 +754,7 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
           {/* ====================================================== */}
           {breakdownAnchor && breakdownRows && (
             <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
-                <div className="mb-4">
+              <div className="mb-4">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Lifetime cash bridge</div>
                 <div className="font-display text-lg">Fade &amp; discount ({breakdownAnchor.capacity.toFixed(1)} MWh sweep point)</div>
               </div>
@@ -733,29 +766,35 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                   <div style={{ width: '100%', height: 220 }}>
                     <ResponsiveContainer>
                       <ComposedChart data={breakdownRows} margin={{ top: 8, right: 12, left: -8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
+                        <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                         <XAxis dataKey="year" stroke="var(--text-faint)"
-                               label={{ value: 'year', position: 'insideBottom', offset: -2,
-                                        fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
+                          label={{
+                            value: 'year', position: 'insideBottom', offset: -2,
+                            fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono'
+                          }} />
                         <YAxis stroke="var(--text-faint)" domain={[0.5, 1]}
-                               tickFormatter={v => `${(v*100).toFixed(0)}%`}/>
+                          tickFormatter={v => `${(v * 100).toFixed(0)}%`} />
                         <Tooltip content={({ active, payload }) => {
                           if (!active || !payload || !payload.length) return null;
                           const p = payload[0].payload;
                           return (
-                            <div style={{ background: 'rgba(10,14,26,0.96)', border: '1px solid var(--border-strong)',
-                                          borderRadius: 4, padding: '8px 12px',
-                                          fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}>
-                              <div style={{ color: 'var(--text-dim)', fontSize: 10, marginBottom: 4,
-                                            textTransform: 'uppercase', letterSpacing: '0.05em' }}>year {p.year}</div>
-                              <div>retention: <span style={{ color: 'var(--accent-rose)' }}>{(p.retAvg*100).toFixed(2)}%</span></div>
+                            <div style={{
+                              background: 'rgba(10,14,26,0.96)', border: '1px solid var(--border-strong)',
+                              borderRadius: 4, padding: '8px 12px',
+                              fontFamily: 'JetBrains Mono, monospace', fontSize: 11
+                            }}>
+                              <div style={{
+                                color: 'var(--text-dim)', fontSize: 10, marginBottom: 4,
+                                textTransform: 'uppercase', letterSpacing: '0.05em'
+                              }}>year {p.year}</div>
+                              <div>retention: <span style={{ color: 'var(--accent-rose)' }}>{(p.retAvg * 100).toFixed(2)}%</span></div>
                               <div>year revenue: <span style={{ color: 'var(--text)' }}>{fmtMoney(p.yearRev)}</span></div>
                             </div>
                           );
-                        }}/>
+                        }} />
                         <Area type="monotone" dataKey="retAvg" name="retention"
-                              fill="var(--accent-rose)" fillOpacity={0.18}
-                              stroke="var(--accent-rose)" strokeWidth={1.6}/>
+                          fill="var(--accent-rose)" fillOpacity={0.18}
+                          stroke="var(--accent-rose)" strokeWidth={1.6} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -766,28 +805,34 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                   <div style={{ width: '100%', height: 220 }}>
                     <ResponsiveContainer>
                       <ComposedChart data={breakdownRows} margin={{ top: 8, right: 12, left: -8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
+                        <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                         <XAxis dataKey="year" stroke="var(--text-faint)"
-                               label={{ value: 'year', position: 'insideBottom', offset: -2,
-                                        fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
-                        <YAxis stroke="var(--text-faint)" tickFormatter={v => fmtMoney(v)} width={48}/>
+                          label={{
+                            value: 'year', position: 'insideBottom', offset: -2,
+                            fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono'
+                          }} />
+                        <YAxis stroke="var(--text-faint)" tickFormatter={v => fmtMoney(v)} width={48} />
                         <Tooltip content={({ active, payload }) => {
                           if (!active || !payload || !payload.length) return null;
                           const p = payload[0].payload;
                           return (
-                            <div style={{ background: 'rgba(10,14,26,0.96)', border: '1px solid var(--border-strong)',
-                                          borderRadius: 4, padding: '8px 12px',
-                                          fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}>
-                              <div style={{ color: 'var(--text-dim)', fontSize: 10, marginBottom: 4,
-                                            textTransform: 'uppercase', letterSpacing: '0.05em' }}>year {p.year}</div>
+                            <div style={{
+                              background: 'rgba(10,14,26,0.96)', border: '1px solid var(--border-strong)',
+                              borderRadius: 4, padding: '8px 12px',
+                              fontFamily: 'JetBrains Mono, monospace', fontSize: 11
+                            }}>
+                              <div style={{
+                                color: 'var(--text-dim)', fontSize: 10, marginBottom: 4,
+                                textTransform: 'uppercase', letterSpacing: '0.05em'
+                              }}>year {p.year}</div>
                               <div>nominal: <span style={{ color: 'var(--accent-amber)' }}>{fmtMoney(p.yearRev)}</span></div>
                               <div>discount factor: <span style={{ color: 'var(--accent-violet)' }}>{p.discFac.toFixed(4)}</span></div>
                               <div>present value: <span style={{ color: 'var(--accent-green)' }}>{fmtMoney(p.discRev)}</span></div>
                             </div>
                           );
-                        }}/>
-                        <Bar dataKey="yearRev" name="nominal €" fill="var(--accent-amber)" fillOpacity={0.35}/>
-                        <Bar dataKey="discRev" name="discounted €" fill="var(--accent-green)" fillOpacity={0.85}/>
+                        }} />
+                        <Bar dataKey="yearRev" name="nominal €" fill="var(--accent-amber)" fillOpacity={0.35} />
+                        <Bar dataKey="discRev" name="discounted €" fill="var(--accent-green)" fillOpacity={0.85} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -814,12 +859,12 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                     <thead style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>
                       <tr>
                         {[
-                          ['year',          'Year'],
-                          ['retention',     'Retention'],
-                          ['year-rev',      'Year revenue'],
-                          ['disc-fac',      'Discount'],
-                          ['pv',            'Present value'],
-                          ['cum-pv',        'Cumulative PV'],
+                          ['year', 'Year'],
+                          ['retention', 'Retention'],
+                          ['year-rev', 'Year revenue'],
+                          ['disc-fac', 'Discount'],
+                          ['pv', 'Present value'],
+                          ['cum-pv', 'Cumulative PV'],
                         ].map(([_, lbl]) => (
                           <th key={lbl} style={{
                             padding: '8px 12px', textAlign: 'right',
@@ -833,18 +878,30 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                     <tbody>
                       {breakdownRows.map((r, idx) => (
                         <tr key={r.year} style={{ background: idx % 2 ? 'var(--surface)' : 'transparent' }}>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
-                                       color: 'var(--text-faint)' }}>{r.year}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
-                                       color: 'var(--accent-rose)' }}>{(r.retAvg * 100).toFixed(2)}%</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
-                                       color: 'var(--accent-amber)' }}>{fmtMoney(r.yearRev)}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
-                                       color: 'var(--accent-violet)' }}>{r.discFac.toFixed(4)}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
-                                       color: 'var(--accent-green)' }}>{fmtMoney(r.discRev)}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
-                                       color: 'var(--text)' }}>{fmtMoney(r.cumDiscRev)}</td>
+                          <td style={{
+                            padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
+                            color: 'var(--text-faint)'
+                          }}>{r.year}</td>
+                          <td style={{
+                            padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
+                            color: 'var(--accent-rose)'
+                          }}>{(r.retAvg * 100).toFixed(2)}%</td>
+                          <td style={{
+                            padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
+                            color: 'var(--accent-amber)'
+                          }}>{fmtMoney(r.yearRev)}</td>
+                          <td style={{
+                            padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
+                            color: 'var(--accent-violet)'
+                          }}>{r.discFac.toFixed(4)}</td>
+                          <td style={{
+                            padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
+                            color: 'var(--accent-green)'
+                          }}>{fmtMoney(r.discRev)}</td>
+                          <td style={{
+                            padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)',
+                            color: 'var(--text)'
+                          }}>{fmtMoney(r.cumDiscRev)}</td>
                         </tr>
                       ))}
                       {/* Total row */}
@@ -857,7 +914,7 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
                           {fmtMoney(breakdownRows[breakdownRows.length - 1].cumDiscRev)}
                         </td>
                         <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-faint)' }}>
-                          × annual charge {(crf*100).toFixed(2)}%
+                          × annual charge {(crf * 100).toFixed(2)}%
                         </td>
                       </tr>
                       <tr style={{ background: 'var(--surface-2)', fontWeight: 600 }}>

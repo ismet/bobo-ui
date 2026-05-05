@@ -18,10 +18,10 @@ export function runOptimization(
   } = params;
 
   const gridLimit = Math.max(chargeMax, dischargeMax);
-  const GRID_TOL  = 1e-6;
+  const GRID_TOL = 1e-6;
 
   const MAX_STEPS = 600;
-  const FIT_TOL   = 1e-4;
+  const FIT_TOL = 1e-4;
   const eAct = [chargeMax * dt, dischargeMax * dt].filter(x => x > 0);
   let dSOC: number, socSteps: number;
   if (eAct.length === 0 || capacity <= 0) {
@@ -55,8 +55,8 @@ export function runOptimization(
       dSOC = capacity / socSteps;
     }
   }
-  const aMaxUp   = Math.max(1, Math.round(dischargeMax * dt / dSOC));
-  const aMaxDown = Math.max(1, Math.round(chargeMax   * dt / dSOC));
+  const aMaxUp = Math.max(1, Math.round(dischargeMax * dt / dSOC));
+  const aMaxDown = Math.max(1, Math.round(chargeMax * dt / dSOC));
 
   const V: (Float64Array | undefined)[] = new Array(T + 1);
   const policy: (Int16Array | undefined)[] = new Array(T);
@@ -71,22 +71,22 @@ export function runOptimization(
     const windE = wt * dt;
 
     const aMaxDownStep = chargeFromGrid
-        ? aMaxDown
-        : Math.min(aMaxDown, Math.floor(windE * chargeEff / dSOC + 1e-9));
+      ? aMaxDown
+      : Math.min(aMaxDown, Math.floor(windE * chargeEff / dSOC + 1e-9));
 
     for (let s = 0; s <= socSteps; s++) {
       let bestVal = -Infinity;
       let bestA = 0;
-      const aLow  = Math.max(-aMaxDownStep, s - socSteps);
-      const aHigh = Math.min( aMaxUp,       s);
-      const capE  = gridLimit * dt;
+      const aLow = Math.max(-aMaxDownStep, s - socSteps);
+      const aHigh = Math.min(aMaxUp, s);
+      const capE = gridLimit * dt;
 
       for (let a = aLow; a <= aHigh; a++) {
         const sNext = s - a;
         let gridE: number;
-        if (a > 0)      gridE = a * dSOC * dischargeEff;
+        if (a > 0) gridE = a * dSOC * dischargeEff;
         else if (a < 0) gridE = a * dSOC / chargeEff;
-        else            gridE = 0;
+        else gridE = 0;
 
         let netE = gridE + windE;
         if (netE < -capE - GRID_TOL) continue;
@@ -135,14 +135,14 @@ export function runOptimization(
       t,
       soc: s * dSOC,
       socFrac: s / socSteps,
-      action:     (a * dSOC) / dt,
+      action: (a * dSOC) / dt,
       gridEnergy: gridE / dt,
       wind: wt,
-      gridTotal:  gridTotalE / dt,
+      gridTotal: gridTotalE / dt,
       price: pr,
-      revenue:        gridTotalE * pr,
+      revenue: gridTotalE * pr,
       windOnlyRevenue: Math.min(windE, cap) * pr,
-      throughput:     throughputE,
+      throughput: throughputE,
       wearStepCost,
       spillE,
     };

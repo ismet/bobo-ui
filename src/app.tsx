@@ -32,13 +32,13 @@ import { SectionHeader, Slider } from './uiPrimitives';
 
 export default function App() {
   // Parameters
-  const [capacity,     setCapacity]     = useState(11);   // MWh
-  const [chargeMax,    setChargeMax]    = useState(6);    // MW
+  const [capacity, setCapacity] = useState(11);   // MWh
+  const [chargeMax, setChargeMax] = useState(6);    // MW
   const [dischargeMax, setDischargeMax] = useState(11);   // MW
-  const [chargeEff,    setChargeEff]    = useState(0.93); // frac
+  const [chargeEff, setChargeEff] = useState(0.93); // frac
   const [dischargeEff, setDischargeEff] = useState(0.95); // frac
-  const [windScale,    setWindScale]    = useState(1.0);
-  const [initialSOC,   setInitialSOC]   = useState(0.5);
+  const [windScale, setWindScale] = useState(1.0);
+  const [initialSOC, setInitialSOC] = useState(0.5);
   const [systemDesignOpen, setSystemDesignOpen] = useState(true);
 
   // Time step in hours (1.0 = hourly, 0.25 = 15 min, 0.5 = 30 min, etc.)
@@ -70,8 +70,8 @@ export default function App() {
   // Battery cost: € per kWh of energy capacity (industry-standard quoting).
   //   2024 typical Li-ion utility-scale cost: ~250–350 €/kWh (BNEF, NREL).
   const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(250); // €/kWh
-  const [interestRatePct, setInterestRatePct]     = useState(9.5); // %
-  const [lifetimeYears, setLifetimeYears]         = useState(20);  // years
+  const [interestRatePct, setInterestRatePct] = useState(9.5); // %
+  const [lifetimeYears, setLifetimeYears] = useState(20);  // years
 
   // Capital recovery factor: CRF = i(1+i)^n / ((1+i)^n - 1)
   // For i = 9.5%, n = 20 → CRF ≈ 0.1142 (each € of CAPEX costs €0.1142/yr).
@@ -208,7 +208,7 @@ export default function App() {
 
   // Active data source
   const activePrice = useMemo(() => customData ? customData.price : PRICE_DATA, [customData]);
-  const activeWind  = useMemo(() => customData ? customData.wind  : WIND_DATA,  [customData]);
+  const activeWind = useMemo(() => customData ? customData.wind : WIND_DATA, [customData]);
   const availableHours = activePrice.length * dt;          // total hours covered by dataset
   const availableSteps = activePrice.length;               // raw point count
   const horizonHours = availableHours;
@@ -217,8 +217,8 @@ export default function App() {
 
   // Slice data
   const pricePeriod = useMemo(() => activePrice.slice(0, horizonSteps), [activePrice, horizonSteps]);
-  const windPeriod  = useMemo(() => activeWind.slice(0, horizonSteps).map(w => w * windScale),
-                                    [activeWind, horizonSteps, windScale]);
+  const windPeriod = useMemo(() => activeWind.slice(0, horizonSteps).map(w => w * windScale),
+    [activeWind, horizonSteps, windScale]);
 
   const runOptim = useCallback(async () => {
     setRunning(true); setErr(null);
@@ -257,8 +257,8 @@ export default function App() {
       if (optimGenRef.current === gen) setRunning(false);
     }
   }, [capacity, chargeMax, dischargeMax, chargeEff, dischargeEff,
-      initialSOC, pricePeriod, windPeriod, dateRangeLabel, dt, targetDsoc, chargeFromGrid,
-      wearCost]);
+    initialSOC, pricePeriod, windPeriod, dateRangeLabel, dt, targetDsoc, chargeFromGrid,
+    wearCost]);
 
   // auto run on mount, when dataset loads,
   // when dt changes, when grid resolution changes, charge source changes,
@@ -293,194 +293,189 @@ export default function App() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start mb-10">
           {/* Parameters */}
           {systemDesignOpen && (
-          <aside className="w-full min-w-0 shrink-0 lg:basis-sys-design">
-            <SectionHeader
-              eyebrow="01 · plant &amp; BESS"
-              title="System design"
-              action={
-                <button
-                  type="button"
-                  onClick={() => setSystemDesignOpen(false)}
-                  className="inline-flex items-center justify-center shrink-0 h-10 w-10 rounded border border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)] hover:text-[color:var(--accent-teal)] transition-colors font-mono text-xl leading-none"
-                  aria-label="Collapse system design sidebar"
-                  title="Collapse sidebar"
-                >
-                  «
-                </button>
-              }
-            />
-            <div className="card p-5">
-              <div>
-                <Slider label="Battery capacity" unit="MWh" min={1} max={100} step={1}
-                        value={capacity} setValue={setCapacity}
-                        hint="energy stored when fully charged" />
-                <Slider label="Max charge power" unit="MW" min={1} max={100} step={1}
-                        value={chargeMax} setValue={setChargeMax} />
-                <Slider label="Max discharge power" unit="MW" min={1} max={100} step={1}
-                        value={dischargeMax} setValue={setDischargeMax} />
-              </div>
-              <div className="hairline my-4"></div>
-              <div>
-                <Slider label="Charge efficiency" unit="" min={0.7} max={0.99} step={0.01}
-                        value={chargeEff} setValue={setChargeEff}
-                        hint={`round-trip ≈ ${(chargeEff*dischargeEff*100).toFixed(1)}%`} />
-                <Slider label="Discharge efficiency" unit="" min={0.7} max={0.99} step={0.01}
-                        value={dischargeEff} setValue={setDischargeEff} />
-              </div>
-              <div className="hairline my-4"></div>
-              <div>
-                <Slider label="Plant output scaling" unit="×" min={0.25} max={3} step={0.05}
-                        value={windScale} setValue={setWindScale}
-                        hint={`peak generation ≈ ${(23*windScale).toFixed(1)} MW (default dataset)`}/>
-                <Slider label="Starting charge level" unit="" min={0} max={1} step={0.05}
-                        value={initialSOC} setValue={setInitialSOC}
-                        hint={`≈ ${(initialSOC*capacity).toFixed(1)} MWh stored`} />
-              </div>
-              <div className="hairline my-4"></div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Charge source</div>
-                  <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
-                    {chargeFromGrid ? 'grid + plant' : 'plant only'}
+            <aside className="w-full min-w-0 shrink-0 lg:basis-sys-design">
+              <SectionHeader
+                eyebrow="01 · plant &amp; BESS"
+                title="System design"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setSystemDesignOpen(false)}
+                    className="inline-flex items-center justify-center shrink-0 h-10 w-10 rounded border border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)] hover:text-[color:var(--accent-teal)] transition-colors font-mono text-xl leading-none"
+                    aria-label="Collapse system design sidebar"
+                    title="Collapse sidebar"
+                  >
+                    «
+                  </button>
+                }
+              />
+              <div className="card p-5">
+                <div>
+                  <Slider label="Battery capacity" unit="MWh" min={1} max={100} step={1}
+                    value={capacity} setValue={setCapacity}
+                    hint="energy stored when fully charged" />
+                  <Slider label="Max charge power" unit="MW" min={1} max={100} step={1}
+                    value={chargeMax} setValue={setChargeMax} />
+                  <Slider label="Max discharge power" unit="MW" min={1} max={100} step={1}
+                    value={dischargeMax} setValue={setDischargeMax} />
+                </div>
+                <div className="hairline my-4"></div>
+                <div>
+                  <Slider label="Charge efficiency" unit="" min={0.7} max={0.99} step={0.01}
+                    value={chargeEff} setValue={setChargeEff}
+                    hint={`round-trip ≈ ${(chargeEff * dischargeEff * 100).toFixed(1)}%`} />
+                  <Slider label="Discharge efficiency" unit="" min={0.7} max={0.99} step={0.01}
+                    value={dischargeEff} setValue={setDischargeEff} />
+                </div>
+                <div className="hairline my-4"></div>
+                <div>
+                  <Slider label="Plant output scaling" unit="×" min={0.25} max={3} step={0.05}
+                    value={windScale} setValue={setWindScale}
+                    hint={`peak generation ≈ ${(23 * windScale).toFixed(1)} MW (default dataset)`} />
+                  <Slider label="Starting charge level" unit="" min={0} max={1} step={0.05}
+                    value={initialSOC} setValue={setInitialSOC}
+                    hint={`≈ ${(initialSOC * capacity).toFixed(1)} MWh stored`} />
+                </div>
+                <div className="hairline my-4"></div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Charge source</div>
+                    <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
+                      {chargeFromGrid ? 'grid + plant' : 'plant only'}
+                    </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-1 mb-2">
-                  <button onClick={() => setChargeFromGrid(true)}
-                    className={`py-2 text-xs font-mono border transition-colors ${
-                      chargeFromGrid
-                        ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
-                        : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
-                    }`}>grid + plant</button>
-                  <button onClick={() => setChargeFromGrid(false)}
-                    className={`py-2 text-xs font-mono border transition-colors ${
-                      !chargeFromGrid
-                        ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
-                        : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
-                    }`}>plant only</button>
-                </div>
-                <div className="text-[10px] font-mono text-[color:var(--text-faint)]" style={{ lineHeight: 1.5 }}>
-                  {chargeFromGrid
-                    ? 'BESS may charge from the grid — full market-side flexibility'
-                    : 'BESS charges only from on-site generation — no grid imports'}
-                </div>
-              </div>
-              <div className="hairline my-4"></div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono mb-2">Time interval</div>
-                <div className="grid grid-cols-4 gap-1 mb-2">
-                  {([
-                    [0.25, '15 min'],
-                    [0.5,  '30 min'],
-                    [1.0,  '1 hr'],
-                    [2.0,  '2 hr'],
-                  ] as const).map(([v, lbl]) => (
-                    <button key={v} onClick={() => setDt(v)}
-                      className={`py-2 text-xs font-mono border transition-colors ${
-                        Math.abs(dt - v) < 1e-6
+                  <div className="grid grid-cols-2 gap-1 mb-2">
+                    <button onClick={() => setChargeFromGrid(true)}
+                      className={`py-2 text-xs font-mono border transition-colors ${chargeFromGrid
                           ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
                           : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
-                      }`}>{lbl}</button>
-                  ))}
-                </div>
-                <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
-                  each row in your data = {dt < 1 ? `${(dt*60).toFixed(0)} min` : `${dt} h`} ·
-                  &nbsp;{availableSteps.toLocaleString()} steps = {availableHours.toLocaleString()} h available
-                </div>
-              </div>
-              <div className="hairline my-4"></div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Optimization resolution</div>
-                  <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
-                    {targetDsoc == null
-                      ? `auto · ≈ ${(capacity / 20).toFixed(2)} MWh`
-                      : `≤ ${targetDsoc} MWh per step`}
+                        }`}>grid + plant</button>
+                    <button onClick={() => setChargeFromGrid(false)}
+                      className={`py-2 text-xs font-mono border transition-colors ${!chargeFromGrid
+                          ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
+                          : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
+                        }`}>plant only</button>
+                  </div>
+                  <div className="text-[10px] font-mono text-[color:var(--text-faint)]" style={{ lineHeight: 1.5 }}>
+                    {chargeFromGrid
+                      ? 'BESS may charge from the grid — full market-side flexibility'
+                      : 'BESS charges only from on-site generation — no grid imports'}
                   </div>
                 </div>
-                <div className="grid grid-cols-5 gap-1 mb-2">
-                  {([
-                    [2.0,  '2'],
-                    [1.0,  '1'],
-                    [0.5,  '0.5'],
-                    [0.25, '0.25'],
-                    [null, 'auto'],
-                  ] as const).map(([v, lbl]) => {
-                    const active = v === null ? targetDsoc == null : (targetDsoc != null && Math.abs(targetDsoc - v) < 1e-9);
-                    return (
-                      <button key={String(v)} onClick={() => setTargetDsoc(v)}
-                        className={`py-2 text-xs font-mono border transition-colors ${
-                          active
+                <div className="hairline my-4"></div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono mb-2">Time interval</div>
+                  <div className="grid grid-cols-4 gap-1 mb-2">
+                    {([
+                      [0.25, '15 min'],
+                      [0.5, '30 min'],
+                      [1.0, '1 hr'],
+                      [2.0, '2 hr'],
+                    ] as const).map(([v, lbl]) => (
+                      <button key={v} onClick={() => setDt(v)}
+                        className={`py-2 text-xs font-mono border transition-colors ${Math.abs(dt - v) < 1e-6
                             ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
                             : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
-                        }`}>{lbl}</button>
-                    );
-                  })}
-                </div>
-                <div className="text-[10px] font-mono text-[color:var(--text-faint)]" style={{ lineHeight: 1.5 }}>
-                  Finer steps refine stored-energy resolution in the dispatch model (more accurate, longer run time).
-                </div>
-              </div>
-              <div className="hairline my-4"></div>
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Loaded horizon</div>
+                          }`}>{lbl}</button>
+                    ))}
+                  </div>
                   <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
-                    {horizonHours.toLocaleString()}h · {horizonSteps.toLocaleString()} steps
+                    each row in your data = {dt < 1 ? `${(dt * 60).toFixed(0)} min` : `${dt} h`} ·
+                    &nbsp;{availableSteps.toLocaleString()} steps = {availableHours.toLocaleString()} h available
                   </div>
                 </div>
-                <button onClick={runOptim} disabled={running}
-                        className="btn-primary w-full flex items-center justify-center gap-2">
-                  {running ? <><span className="spinner"></span> Optimizing dispatch…</> : <>Optimize dispatch ↗</>}
-                </button>
-                {err && <div className="mt-3 text-xs text-[color:var(--accent-rose)] font-mono">Error: {err}</div>}
+                <div className="hairline my-4"></div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Optimization resolution</div>
+                    <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
+                      {targetDsoc == null
+                        ? `auto · ≈ ${(capacity / 20).toFixed(2)} MWh`
+                        : `≤ ${targetDsoc} MWh per step`}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1 mb-2">
+                    {([
+                      [2.0, '2'],
+                      [1.0, '1'],
+                      [0.5, '0.5'],
+                      [0.25, '0.25'],
+                      [null, 'auto'],
+                    ] as const).map(([v, lbl]) => {
+                      const active = v === null ? targetDsoc == null : (targetDsoc != null && Math.abs(targetDsoc - v) < 1e-9);
+                      return (
+                        <button key={String(v)} onClick={() => setTargetDsoc(v)}
+                          className={`py-2 text-xs font-mono border transition-colors ${active
+                              ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
+                              : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
+                            }`}>{lbl}</button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[10px] font-mono text-[color:var(--text-faint)]" style={{ lineHeight: 1.5 }}>
+                    Finer steps refine stored-energy resolution in the dispatch model (more accurate, longer run time).
+                  </div>
+                </div>
+                <div className="hairline my-4"></div>
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Loaded horizon</div>
+                    <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
+                      {horizonHours.toLocaleString()}h · {horizonSteps.toLocaleString()} steps
+                    </div>
+                  </div>
+                  <button onClick={runOptim} disabled={running}
+                    className="btn-primary w-full flex items-center justify-center gap-2">
+                    {running ? <><span className="spinner"></span> Optimizing dispatch…</> : <>Optimize dispatch ↗</>}
+                  </button>
+                  {err && <div className="mt-3 text-xs text-[color:var(--accent-rose)] font-mono">Error: {err}</div>}
+                </div>
               </div>
-            </div>
-            <DataInputCard
-              customData={customData}
-              setCustomData={setCustomDataWithSource}
-              defaultLen={PRICE_DATA.length}
-              onClearBoboInflight={clearBoboInflight}
-              powerPlants={powerPlants}
-              plantsLoading={plantsLoading}
-              plantsError={plantsError}
-              seriesLoading={seriesLoading}
-              selectedPlantId={selectedPlantId}
-              onPickPlant={handlePickPlant}
-              boboStartDate={boboStartDate}
-              boboEndDate={boboEndDate}
-              onBoboStartDateChange={(v: string) => { setBoboStartDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
-              onBoboEndDateChange={(v: string) => { setBoboEndDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
-              onApplyPlantRange={handleApplyPlantRange}
-              canApplyPlantRange={hasUnappliedChanges}
-              boboSeriesError={boboSeriesError}
-            />
-            <EconomicsCard
-              batteryCostPerKWh={batteryCostPerKWh}
-              setBatteryCostPerKWh={setBatteryCostPerKWh}
-              interestRatePct={interestRatePct}
-              setInterestRatePct={setInterestRatePct}
-              lifetimeYears={lifetimeYears}
-              setLifetimeYears={setLifetimeYears}
-              crf={crf}
-              capacity={capacity}
-            />
-            <DegradationCard
-              wearCost={wearCost}                 setWearCost={setWearCost}
-              yearOneFadePct={yearOneFadePct}     setYearOneFadePct={setYearOneFadePct}
-              longTermFadePct={longTermFadePct}   setLongTermFadePct={setLongTermFadePct}
-              lifetimeYears={lifetimeYears}
-              capacity={capacity}
-              batteryCostPerKWh={batteryCostPerKWh}
-            />
-            <MarketOverview price={pricePeriod} wind={windPeriod} dateRangeLabel={dateRangeLabel} />
-          </aside>
+              <DataInputCard
+                customData={customData}
+                setCustomData={setCustomDataWithSource}
+                defaultLen={PRICE_DATA.length}
+                onClearBoboInflight={clearBoboInflight}
+                powerPlants={powerPlants}
+                plantsLoading={plantsLoading}
+                plantsError={plantsError}
+                seriesLoading={seriesLoading}
+                selectedPlantId={selectedPlantId}
+                onPickPlant={handlePickPlant}
+                boboStartDate={boboStartDate}
+                boboEndDate={boboEndDate}
+                onBoboStartDateChange={(v: string) => { setBoboStartDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
+                onBoboEndDateChange={(v: string) => { setBoboEndDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
+                onApplyPlantRange={handleApplyPlantRange}
+                canApplyPlantRange={hasUnappliedChanges}
+                boboSeriesError={boboSeriesError}
+              />
+              <EconomicsCard
+                batteryCostPerKWh={batteryCostPerKWh}
+                setBatteryCostPerKWh={setBatteryCostPerKWh}
+                interestRatePct={interestRatePct}
+                setInterestRatePct={setInterestRatePct}
+                lifetimeYears={lifetimeYears}
+                setLifetimeYears={setLifetimeYears}
+                crf={crf}
+                capacity={capacity}
+              />
+              <DegradationCard
+                wearCost={wearCost} setWearCost={setWearCost}
+                yearOneFadePct={yearOneFadePct} setYearOneFadePct={setYearOneFadePct}
+                longTermFadePct={longTermFadePct} setLongTermFadePct={setLongTermFadePct}
+                lifetimeYears={lifetimeYears}
+                capacity={capacity}
+                batteryCostPerKWh={batteryCostPerKWh}
+              />
+              <MarketOverview price={pricePeriod} wind={windPeriod} dateRangeLabel={dateRangeLabel} />
+            </aside>
           )}
 
           {/* Results */}
           <section
-            className={`relative min-w-0 w-full ${
-              systemDesignOpen ? 'lg:basis-results' : 'flex-1'
-            }`}
+            className={`relative min-w-0 w-full ${systemDesignOpen ? 'lg:basis-results' : 'flex-1'
+              }`}
           >
             {!systemDesignOpen && (
               <button
@@ -497,97 +492,97 @@ export default function App() {
               </button>
             )}
             <div className={`min-w-0 ${!systemDesignOpen ? 'pl-11 lg:pl-10' : ''}`}>
-            <SectionHeader eyebrow="02 · plant BESS results" title="Revenue & utilization"
-              kicker={result ? `${result.traj.length.toLocaleString()} intervals · optimized dispatch · charging from ${result.params.chargeFromGrid === false ? 'on-site generation only' : 'grid and on-site generation'}.` : 'Preparing dispatch…'} />
-            {result && <KPIRow result={result} />}
-            {result && <ChartsPanel result={result} />}
-            {result && (
-              <>
-                <SectionHeader eyebrow="03 · dispatch &amp; cycling"
-                  title="Stored energy and power, hour by hour"
-                  kicker="Recommended schedule from dispatch optimization—state of charge plus charge/discharge power. Bars above zero export to the grid; below zero draw power for charging."
-                />
-                <DispatchChart result={result} />
+              <SectionHeader eyebrow="02 · plant BESS results" title="Revenue & utilization"
+                kicker={result ? `${result.traj.length.toLocaleString()} intervals · optimized dispatch · charging from ${result.params.chargeFromGrid === false ? 'on-site generation only' : 'grid and on-site generation'}.` : 'Preparing dispatch…'} />
+              {result && <KPIRow result={result} />}
+              {result && <ChartsPanel result={result} />}
+              {result && (
+                <>
+                  <SectionHeader eyebrow="03 · dispatch &amp; cycling"
+                    title="Stored energy and power, hour by hour"
+                    kicker="Recommended schedule from dispatch optimization—state of charge plus charge/discharge power. Bars above zero export to the grid; below zero draw power for charging."
+                  />
+                  <DispatchChart result={result} />
 
-                <div className="my-10"></div>
-                <SectionHeader eyebrow="04 · market-aligned operation"
-                  title="Dispatch vs wholesale price"
-                  kicker="Same optimized schedule against the market—energy shifted to high-price hours, replenished in low-price hours."
-                />
-                <BatteryVsPriceChart result={result} />
+                  <div className="my-10"></div>
+                  <SectionHeader eyebrow="04 · market-aligned operation"
+                    title="Dispatch vs wholesale price"
+                    kicker="Same optimized schedule against the market—energy shifted to high-price hours, replenished in low-price hours."
+                  />
+                  <BatteryVsPriceChart result={result} />
 
-                <div className="my-10"></div>
-                <SectionHeader eyebrow="05 · value from storage"
-                  title="Extra revenue from co-located BESS"
-                  kicker="Generation-only revenue vs plant + battery—the gap is the incremental value your system delivers at this site."
-                />
-                <UpliftChart result={result} />
+                  <div className="my-10"></div>
+                  <SectionHeader eyebrow="05 · value from storage"
+                    title="Extra revenue from co-located BESS"
+                    kicker="Generation-only revenue vs plant + battery—the gap is the incremental value your system delivers at this site."
+                  />
+                  <UpliftChart result={result} />
 
-                <div className="my-10"></div>
-                <SectionHeader eyebrow="06 · utilization profile"
-                  title="Cycling pattern vs price"
-                  kicker="How charge, idle, and discharge hours fall across wholesale price bands—useful for throughput and warranty discussions."
-                />
-                <div className="grid grid-cols-12 gap-6">
-                  <div className="col-span-12 md:col-span-6"><ActionHistogram result={result} /></div>
-                  <div className="col-span-12 md:col-span-6"><PriceDurationCurve result={result} /></div>
-                </div>
-
-                <div className="my-10"></div>
-                <SectionHeader eyebrow="07 · sizing sweep"
-                  title="How does project value scale with energy capacity?"
-                  kicker="Repeated dispatch optimization across MWh sizes—typical for quoting modular racks or proving ROI at different pack sizes. Inverter limits match the left panel unless power scales with energy."
-                />
-                <CapacitySweepChart
-                  basePrice={result.pricePeriod}
-                  baseWind={result.windPeriod}
-                  baseParams={result.params}
-                  dt={result.dt}
-                  batteryCostPerKWh={batteryCostPerKWh}
-                  crf={crf}
-                  interestRatePct={interestRatePct}
-                  lifetimeYears={lifetimeYears}
-                  yearOneFadePct={yearOneFadePct}
-                  longTermFadePct={longTermFadePct}
-                />
-
-                <div className="my-10"></div>
-                <SectionHeader eyebrow="08 · dispatch export"
-                  title="Hour-by-hour operation table"
-                  kicker="Physical dispatch, throughput, and revenue by interval—export for customer studies, warranty models, or integration specs."
-                />
-                <OutputTable result={result} />
-
-                <div className="my-10"></div>
-                <SectionHeader eyebrow="09 · notes"
-                  title="Model scope (dispatch layer)"
-                />
-                <div className="card p-6 text-sm text-[color:var(--text-dim)] leading-relaxed grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <div className="text-[color:var(--text)] font-semibold mb-2">Commercial objective</div>
-                    <p>Maximize wholesale revenue over the horizon: energy delivered × price each interval for the hybrid plant. Aligns with how owners evaluate BESS add-ons.</p>
+                  <div className="my-10"></div>
+                  <SectionHeader eyebrow="06 · utilization profile"
+                    title="Cycling pattern vs price"
+                    kicker="How charge, idle, and discharge hours fall across wholesale price bands—useful for throughput and warranty discussions."
+                  />
+                  <div className="grid grid-cols-12 gap-6">
+                    <div className="col-span-12 md:col-span-6"><ActionHistogram result={result} /></div>
+                    <div className="col-span-12 md:col-span-6"><PriceDurationCurve result={result} /></div>
                   </div>
-                  <div>
-                    <div className="text-[color:var(--text)] font-semibold mb-2">Dispatch optimization</div>
-                    <p>Charge and discharge are chosen each step to maximize that objective within power limits, round-trip efficiency, and installed MWh—runs locally from your scenario inputs.</p>
+
+                  <div className="my-10"></div>
+                  <SectionHeader eyebrow="07 · sizing sweep"
+                    title="How does project value scale with energy capacity?"
+                    kicker="Repeated dispatch optimization across MWh sizes—typical for quoting modular racks or proving ROI at different pack sizes. Inverter limits match the left panel unless power scales with energy."
+                  />
+                  <CapacitySweepChart
+                    basePrice={result.pricePeriod}
+                    baseWind={result.windPeriod}
+                    baseParams={result.params}
+                    dt={result.dt}
+                    batteryCostPerKWh={batteryCostPerKWh}
+                    crf={crf}
+                    interestRatePct={interestRatePct}
+                    lifetimeYears={lifetimeYears}
+                    yearOneFadePct={yearOneFadePct}
+                    longTermFadePct={longTermFadePct}
+                  />
+
+                  <div className="my-10"></div>
+                  <SectionHeader eyebrow="08 · dispatch export"
+                    title="Hour-by-hour operation table"
+                    kicker="Physical dispatch, throughput, and revenue by interval—export for customer studies, warranty models, or integration specs."
+                  />
+                  <OutputTable result={result} />
+
+                  <div className="my-10"></div>
+                  <SectionHeader eyebrow="09 · notes"
+                    title="Model scope (dispatch layer)"
+                  />
+                  <div className="card p-6 text-sm text-[color:var(--text-dim)] leading-relaxed grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <div className="text-[color:var(--text)] font-semibold mb-2">Commercial objective</div>
+                      <p>Maximize wholesale revenue over the horizon: energy delivered × price each interval for the hybrid plant. Aligns with how owners evaluate BESS add-ons.</p>
+                    </div>
+                    <div>
+                      <div className="text-[color:var(--text)] font-semibold mb-2">Dispatch optimization</div>
+                      <p>Charge and discharge are chosen each step to maximize that objective within power limits, round-trip efficiency, and installed MWh—runs locally from your scenario inputs.</p>
+                    </div>
+                    <div>
+                      <div className="text-[color:var(--text)] font-semibold mb-2">Pack &amp; inverter assumptions</div>
+                      <p>Efficiency sliders should reflect your product datasheet or integration losses so utilization and revenue stay credible for customer pitches.</p>
+                    </div>
+                    <div>
+                      <div className="text-[color:var(--text)] font-semibold mb-2">Cycling cost &amp; fade</div>
+                      <p>Optional <strong>throughput cost</strong> (€/MWh through the pack) penalizes heavy cycling in the objective. <strong>Calendar fade</strong> feeds economics views, not the hourly dispatch loop.</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-[color:var(--text)] font-semibold mb-2">Not in this layer</div>
+                      <p>• BMS / thermal / C-rate limits beyond the MW caps shown<br />
+                        • Dedicated grid export breaker settings (table may show combined plant + BESS)<br />
+                        • Uncertain prices or forecasts (perfect foresight on uploaded series)</p>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-[color:var(--text)] font-semibold mb-2">Pack &amp; inverter assumptions</div>
-                    <p>Efficiency sliders should reflect your product datasheet or integration losses so utilization and revenue stay credible for customer pitches.</p>
-                  </div>
-                  <div>
-                    <div className="text-[color:var(--text)] font-semibold mb-2">Cycling cost &amp; fade</div>
-                    <p>Optional <strong>throughput cost</strong> (€/MWh through the pack) penalizes heavy cycling in the objective. <strong>Calendar fade</strong> feeds economics views, not the hourly dispatch loop.</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className="text-[color:var(--text)] font-semibold mb-2">Not in this layer</div>
-                    <p>• BMS / thermal / C-rate limits beyond the MW caps shown<br/>
-                       • Dedicated grid export breaker settings (table may show combined plant + BESS)<br/>
-                       • Uncertain prices or forecasts (perfect foresight on uploaded series)</p>
-                  </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
             </div>
           </section>
         </div>
