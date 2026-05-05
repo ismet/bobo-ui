@@ -164,6 +164,93 @@
     100% { transform: translateX(350%); }
   }
 
+  /* Full-screen job overlay (optimize dispatch, sizing sweep) */
+  .job-overlay-root {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(10, 14, 26, 0.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .job-overlay-panel {
+    width: 100%;
+    max-width: 28rem;
+    padding: 2rem 2.25rem;
+    box-shadow:
+      0 0 0 1px rgba(45, 212, 191, 0.12),
+      0 24px 80px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(165deg, var(--surface) 0%, #0f1628 100%);
+  }
+  .job-overlay-track {
+    height: 4px;
+    margin-top: 0;
+    background: var(--border-strong);
+  }
+  .job-overlay-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, var(--accent-teal), rgba(94, 234, 212, 0.92));
+    box-shadow: 0 0 22px rgba(45, 212, 191, 0.35);
+    transition: width 0.35s ease-out;
+  }
+  .job-overlay-indeterminate {
+    box-shadow: 0 0 16px rgba(45, 212, 191, 0.25);
+  }
+  /* Infinite march — transform on ::before (background-position animation often stalls / looks frozen) */
+  .job-overlay-stream {
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+    border-radius: 9999px;
+    background: var(--border-strong);
+  }
+  .job-overlay-stream::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 48%;
+    border-radius: 9999px;
+    background: linear-gradient(
+      90deg,
+      rgba(45, 212, 191, 0.08),
+      var(--accent-teal),
+      rgba(94, 234, 212, 0.55)
+    );
+    box-shadow: 0 0 18px rgba(45, 212, 191, 0.4);
+    animation: job-overlay-stream-march 1.2s linear infinite;
+    will-change: transform;
+  }
+  @keyframes job-overlay-stream-march {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(320%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .job-overlay-root {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .loading-bar-indeterminate {
+      animation: none;
+      opacity: 0.85;
+      transform: translateX(30%);
+    }
+    .job-overlay-fill {
+      transition: none;
+    }
+    .job-overlay-stream::before {
+      animation: job-overlay-stream-march 3s linear infinite;
+    }
+  }
+
   /* Power plant combobox */
   .pp-combobox { position: relative; width: 100%; }
   .pp-combobox-input-wrap {

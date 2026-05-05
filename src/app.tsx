@@ -1,7 +1,7 @@
 // ============================================================================
 // MAIN APP
 // ============================================================================
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CapacitySweepChart } from './charts/capacitySweepChart';
 import {
   BatteryVsPriceChart,
@@ -28,6 +28,7 @@ import {
 import { runOptimizationDelegated } from './engine/optimizationRunner';
 import type { OptimizationParams } from './engine/types';
 import type { OptimizationRunResult } from './optimizationTypes';
+import { FullScreenJobOverlay } from './fullScreenJobOverlay';
 import { SectionHeader, Slider } from './uiPrimitives';
 
 export default function App() {
@@ -123,6 +124,8 @@ export default function App() {
   const [appliedYearOneFadePct, setAppliedYearOneFadePct] = useState<number | null>(null);
   const [appliedLongTermFadePct, setAppliedLongTermFadePct] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
+  /** Bumped only after a successful optimize commit; drives deferred overlay dismiss after charts paint. */
+  const [optimizeOverlayDismissTick, setOptimizeOverlayDismissTick] = useState(0);
   const [err, setErr] = useState<string | null>(null);
 
   const appliedCrf = useMemo(() => {
@@ -194,6 +197,54 @@ export default function App() {
 
   const hasPendingChanges = appliedScenarioKey == null || appliedScenarioKey !== draftScenarioKey;
 
+  useLayoutEffect(() => {
+    if (optimizeOverlayDismissTick === 0 || appliedResult == null) return;
+
+    const horizonHours = appliedResult.traj.length * appliedResult.dt;
+    const numDays = horizonHours / 24;
+    const dismissDelayMs = Math.max(0, numDays * 10);
+
+    let cancelled = false;
+    /** Idle vs immediate fallback */
+    let idleOrTimerId: number | undefined;
+    let usedIdleCallback = false;
+    /** Extra hold so the optimize overlay stays visible after charts settle */
+    let dismissDelayId: number | undefined;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        const scheduleDismiss = () => {
+          if (cancelled) return;
+          dismissDelayId = window.setTimeout(() => {
+            dismissDelayId = undefined;
+            if (!cancelled) setRunning(false);
+          }, dismissDelayMs);
+        };
+        if (typeof requestIdleCallback === 'function') {
+          usedIdleCallback = true;
+          idleOrTimerId = requestIdleCallback(scheduleDismiss, { timeout: 2000 }) as unknown as number;
+        } else {
+          idleOrTimerId = window.setTimeout(scheduleDismiss, 200);
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      if (idleOrTimerId !== undefined) {
+        if (usedIdleCallback && typeof cancelIdleCallback === 'function') {
+          cancelIdleCallback(idleOrTimerId);
+        } else {
+          window.clearTimeout(idleOrTimerId);
+        }
+      }
+      if (dismissDelayId !== undefined) {
+        window.clearTimeout(dismissDelayId);
+      }
+    };
+  }, [optimizeOverlayDismissTick, appliedResult]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -223,7 +274,7 @@ export default function App() {
 
   useEffect(() => () => { seriesAbortRef.current?.abort(); }, []);
 
-  const fetchPlantSeries = useCallback(async (id: string | number, startDate: string, endDate: string) => {
+  const fetchPlantSeries = useCallback(async (id: string | number, startDate: string, endDate: string): Promise<SeriesData | null> => {
     const gen = ++seriesFetchGenRef.current;
     seriesAbortRef.current?.abort();
     const ac = new AbortController();
@@ -248,11 +299,14 @@ export default function App() {
       if (price.some((n: number) => !isFinite(n)) || wind.some((n: number) => !isFinite(n))) {
         throw new Error('Non-finite values in series');
       }
-      setCustomDataWithSource({ price, wind }, true);
+      const data: SeriesData = { price, wind };
+      setCustomDataWithSource(data, true);
       setHasUnappliedChanges(false);
+      return data;
     } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') return;
+      if (e instanceof Error && e.name === 'AbortError') return null;
       setBoboSeriesError(e instanceof Error ? e.message : String(e));
+      return null;
     } finally {
       if (seriesFetchGenRef.current === gen) {
         seriesAbortRef.current = null;
@@ -267,27 +321,6 @@ export default function App() {
     setHasUnappliedChanges(true);
   }, []);
 
-  const handleApplyPlantRange = useCallback(async () => {
-    if (seriesLoading) return;
-    if (!selectedPlantId) {
-      setBoboSeriesError('Select a power plant before applying date range.');
-      return;
-    }
-    const yesterday = new Date();
-    yesterday.setHours(0, 0, 0, 0);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const maxDate = formatLocalYMD(yesterday);
-    if (boboStartDate > boboEndDate) {
-      setBoboSeriesError('Start date must be before or equal to end date.');
-      return;
-    }
-    if (boboStartDate > maxDate || boboEndDate > maxDate) {
-      setBoboSeriesError('Date range cannot include today or future dates.');
-      return;
-    }
-    await fetchPlantSeries(selectedPlantId, boboStartDate, boboEndDate);
-  }, [seriesLoading, selectedPlantId, boboStartDate, boboEndDate, fetchPlantSeries]);
-
   // Draft data source (for labels/hints only)
   const draftActivePrice = useMemo(() => customData ? customData.price : PRICE_DATA, [customData]);
   const draftActiveWind = useMemo(() => customData ? customData.wind : WIND_DATA, [customData]);
@@ -296,10 +329,10 @@ export default function App() {
   const horizonHours = availableHours;
   const horizonSteps = availableSteps;
 
-  const optimize = useCallback(async () => {
-    if (running) return;
-    // Snapshot draft at click-time (no partial updates).
-    const snapCustomData = customData;
+  const optimize = useCallback(async (seriesOverride?: SeriesData | null): Promise<OptimizationRunResult | null> => {
+    if (running) return null;
+    // Snapshot draft at click-time (no partial updates). Override avoids stale React state right after plant fetch.
+    const snapCustomData = seriesOverride !== undefined ? seriesOverride : customData;
     const snapSelectedPlantId = selectedPlantId;
     const snapBoboStartDate = boboStartDate;
     const snapBoboEndDate = boboEndDate;
@@ -333,6 +366,8 @@ export default function App() {
     setRunning(true); setErr(null);
     await new Promise(r => setTimeout(r, 20));
     const gen = ++optimGenRef.current;
+    let completedOk = false;
+    let result: OptimizationRunResult | null = null;
     try {
       const socSteps = 20;
       const params: OptimizationParams = {
@@ -351,19 +386,13 @@ export default function App() {
       };
       const tWall0 = performance.now();
       const { traj, workerMs, usedWorker } = await runOptimizationDelegated(pricePeriod, windPeriod, params);
-      if (optimGenRef.current !== gen) return;
+      if (optimGenRef.current !== gen) return null;
       const wallMs = performance.now() - tWall0;
       const n = pricePeriod.length;
       const ph = fingerprintSeriesSample(pricePeriod, windPeriod);
       const spotWindRescaleKey = `${n}:${ph}`;
 
-      setAppliedScenarioKey(snapKey);
-      setAppliedBatteryCostPerKWh(snapBatteryCostPerKWh);
-      setAppliedInterestRatePct(snapInterestRatePct);
-      setAppliedLifetimeYears(snapLifetimeYears);
-      setAppliedYearOneFadePct(snapYearOneFadePct);
-      setAppliedLongTermFadePct(snapLongTermFadePct);
-      setAppliedResult({
+      const applied: OptimizationRunResult = {
         traj,
         params,
         pricePeriod,
@@ -374,13 +403,24 @@ export default function App() {
         usedWorker,
         dateRangeLabel,
         dt,
-      });
+      };
+      setAppliedScenarioKey(snapKey);
+      setAppliedBatteryCostPerKWh(snapBatteryCostPerKWh);
+      setAppliedInterestRatePct(snapInterestRatePct);
+      setAppliedLifetimeYears(snapLifetimeYears);
+      setAppliedYearOneFadePct(snapYearOneFadePct);
+      setAppliedLongTermFadePct(snapLongTermFadePct);
+      setAppliedResult(applied);
+      result = applied;
+      completedOk = true;
+      setOptimizeOverlayDismissTick(t => t + 1);
     } catch (e) {
-      if (optimGenRef.current !== gen) return;
+      if (optimGenRef.current !== gen) return null;
       setErr(String(e));
-    } finally {
-      if (optimGenRef.current === gen) setRunning(false);
     }
+    if (optimGenRef.current !== gen) return null;
+    if (!completedOk) setRunning(false);
+    return result;
   }, [
     running,
     customData,
@@ -406,13 +446,46 @@ export default function App() {
     draftScenarioKey,
   ]);
 
+  /** Dismiss optimize overlay immediately so the sizing-sweep overlay can show; sweep uses returned series/params. */
+  const runOptimizeBeforeSizingSweep = useCallback(async (): Promise<OptimizationRunResult | null> => {
+    const r = await optimize();
+    if (r) setRunning(false);
+    return r;
+  }, [optimize]);
+
+  const handleApplyPlantRange = useCallback(async () => {
+    if (seriesLoading) return;
+    if (!selectedPlantId) {
+      setBoboSeriesError('Select a power plant before applying date range.');
+      return;
+    }
+    const yesterday = new Date();
+    yesterday.setHours(0, 0, 0, 0);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const maxDate = formatLocalYMD(yesterday);
+    if (boboStartDate > boboEndDate) {
+      setBoboSeriesError('Start date must be before or equal to end date.');
+      return;
+    }
+    if (boboStartDate > maxDate || boboEndDate > maxDate) {
+      setBoboSeriesError('Date range cannot include today or future dates.');
+      return;
+    }
+    const loaded = await fetchPlantSeries(selectedPlantId, boboStartDate, boboEndDate);
+    if (loaded) await optimize(loaded);
+  }, [seriesLoading, selectedPlantId, boboStartDate, boboEndDate, fetchPlantSeries, optimize]);
+
   return (
     <div className="min-h-screen">
       <Header />
       <main className="w-full px-6 pb-24">
         {/* Hero */}
         <section className="pt-10 pb-8 grid-bg border-b border-[color:var(--border)] -mx-6 px-6 mb-10">
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <span className="chip border-[color:var(--accent-teal)]/40 bg-[color:var(--accent-teal)]/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent-teal)]"></span>
+              EPİAŞ-integrated
+            </span>
             <span className="chip"><span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent-teal)]"></span>Plant-integrated BESS</span>
             <span className="chip">Dispatch optimization</span>
             <span className="chip">Utilization &amp; cycling</span>
@@ -425,7 +498,7 @@ export default function App() {
           <p className="mt-5 max-w-2xl text-[color:var(--text-dim)] leading-relaxed">
             For battery producers and integrators: show customers how co-located BESS raises revenue and clarifies cycling when
             storage works alongside generation—optimized dispatch for wholesale signals, export limits, and your efficiency assumptions.
-            Load plant prices and output or use the bundled sample.
+            Pull hourly price and generation from registered plants (EPİAŞ transparency ecosystem), paste your own series, or use the bundled sample.
           </p>
         </section>
 
@@ -553,7 +626,7 @@ export default function App() {
                       Pending changes
                     </div>
                   )}
-                  <button onClick={optimize} disabled={running}
+                  <button onClick={() => { void optimize(); }} disabled={running}
                     className="btn-primary w-full flex items-center justify-center gap-2">
                     {running ? <><span className="spinner"></span> Optimizing dispatch…</> : <>Optimize dispatch ↗</>}
                   </button>
@@ -675,6 +748,7 @@ export default function App() {
                     baseWind={appliedResult.windPeriod}
                     baseParams={appliedResult.params}
                     dt={appliedResult.dt}
+                    runOptimizeBeforeSweep={runOptimizeBeforeSizingSweep}
                     batteryCostPerKWh={appliedBatteryCostPerKWh ?? batteryCostPerKWh}
                     crf={appliedCrf}
                     interestRatePct={appliedInterestRatePct ?? interestRatePct}
@@ -725,6 +799,17 @@ export default function App() {
         </div>
       </main>
       <Footer />
+      <FullScreenJobOverlay
+        open={running || seriesLoading}
+        eyebrow={running ? 'Dispatch optimization' : 'Power plant data'}
+        title={running ? 'Optimizing dispatch' : 'Load EPİAŞ data'}
+        hint={
+          running
+            ? undefined
+            : 'Fetching hourly prices and generation for the selected plant and dates from the API.'
+        }
+        indeterminateStyle="shimmer"
+      />
     </div>
   );
 }

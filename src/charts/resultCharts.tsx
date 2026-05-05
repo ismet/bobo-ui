@@ -7,26 +7,39 @@ import { fmtMoney, fmtNumber, plotAll, tsLabel } from '../formatUtils';
 import { LegendChip, useIsolation, useZoom, ZoomBadge } from './chartInteractions';
 import { KPI, Tip } from '../uiPrimitives';
 import type { OptimizationRunResult } from '../optimizationTypes';
-import type { TrajectoryStep } from '../engine/types';
 
 export function Header() {
   return (
     <header className="border-b border-[color:var(--border)]">
-      <div className="w-full px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+      <div className="w-full px-6 py-4 flex flex-wrap items-center justify-between gap-y-3 gap-x-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden>
             <circle cx="16" cy="16" r="15" stroke="var(--accent-teal)" strokeWidth="1.5"/>
             <path d="M8 20 L14 14 L18 18 L24 10" stroke="var(--accent-teal)" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
             <circle cx="24" cy="10" r="2" fill="var(--accent-amber)"/>
           </svg>
-          <div>
+          <div className="min-w-0">
             <div className="font-display text-lg leading-none">Plant BESS studio</div>
-            <div className="text-[10px] text-[color:var(--text-faint)] font-mono uppercase tracking-wider">Co-located storage · dispatch optimization</div>
+            <div className="text-[10px] text-[color:var(--text-faint)] font-mono uppercase tracking-wider">
+              <span className="text-[color:var(--accent-teal)]">EPİAŞ-integrated</span>
+              {' · '}
+              <a
+                href="https://www.epias.com.tr/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-[color:var(--border-strong)] underline-offset-2 hover:text-[color:var(--text-dim)]"
+              >
+                Enerji Piyasaları İşletme A.Ş.
+              </a>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-xs font-mono text-[color:var(--text-dim)]">
-          <span className="hidden md:inline">dataset: 8,784 h · 2024</span>
-          <span className="chip">spot price · MWh</span>
+        <div className="flex flex-wrap items-center gap-2 md:gap-3 text-xs font-mono text-[color:var(--text-dim)]">
+          <span className="chip border-[color:var(--accent-teal)]/35 bg-[color:var(--accent-teal)]/08">
+            EPİAŞ market signals
+          </span>
+          <span className="hidden sm:inline chip">PTF / plant series</span>
+          <span className="hidden md:inline text-[color:var(--text-faint)]">default: 8,784 h · 2024</span>
         </div>
       </div>
     </header>
@@ -37,8 +50,21 @@ export function Footer() {
   return (
     <footer className="border-t border-[color:var(--border)] mt-10">
       <div className="w-full px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-[color:var(--text-faint)]">
-        <div>Demo / illustrative scenario — not a warranty or guarantee</div>
-        <div>Runs locally · use your own plant &amp; market data</div>
+        <div>
+          Demo / illustrative scenario — not a warranty or guarantee.
+          {' '}
+          Built around{' '}
+          <a
+            href="https://www.epias.com.tr/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[color:var(--text-dim)] underline decoration-[color:var(--border-strong)] underline-offset-2 hover:text-[color:var(--accent-teal)]"
+          >
+            EPİAŞ
+          </a>
+          -aligned transparency and market data workflows.
+        </div>
+        <div>Runs locally · paste files or pull registered plant series</div>
       </div>
     </footer>
   );

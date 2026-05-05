@@ -229,7 +229,13 @@ export function PowerPlantCombobox({
       {showBar && (
         <div className="loading-bar-wrap">
           <div className="loading-bar-label">{barLabel}</div>
-          <div className="loading-bar-track"><div className="loading-bar-indeterminate" /></div>
+          <div className="loading-bar-track">
+            {seriesLoading && !plantsLoading ? (
+              <div className="job-overlay-stream" />
+            ) : (
+              <div className="loading-bar-indeterminate" />
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -361,7 +367,9 @@ export const DataInputCard = memo(({
     <div className="mt-6 card p-5">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">Plant &amp; market series</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">
+            EPİAŞ-connected · plant &amp; market series
+          </div>
           <div className="font-display text-base mt-1">
             {customData ? 'Custom dataset' : 'Default dataset'}
             <span className="text-[color:var(--text-dim)] font-mono text-xs ml-2">
@@ -375,6 +383,9 @@ export const DataInputCard = memo(({
         </span>
       </div>
 
+      <p className="mb-2 text-[10px] font-mono text-[color:var(--text-faint)] leading-relaxed">
+        Select a registered power plant to load hourly wholesale price and net generation for your date range—served through this app’s EPİAŞ-aligned transparency integration.
+      </p>
       <PowerPlantCombobox
         plants={powerPlants}
         plantsLoading={plantsLoading}
@@ -415,7 +426,7 @@ export const DataInputCard = memo(({
             className="btn-primary w-full"
             style={{ opacity: seriesLoading || !canApplyPlantRange ? 0.6 : 1 }}
           >
-            {seriesLoading ? 'Applying...' : 'Apply plant + date range'}
+            {seriesLoading ? 'Loading…' : 'Load EPİAŞ data'}
           </button>
         </div>
       </div>

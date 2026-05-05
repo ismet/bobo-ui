@@ -4,8 +4,19 @@ import {
 } from 'recharts';
 import { fmtMoney, fmtNumber } from '../formatUtils';
 import { buildFadeCurve } from '../panels/economicsDegradation';
+import { FullScreenJobOverlay } from '../fullScreenJobOverlay';
 import { runOptimizationDelegated } from '../engine/optimizationRunner';
 import type { OptimizationParams, Trajectory } from '../engine/types';
+import type { OptimizationRunResult } from '../optimizationTypes';
+
+function buildSweepGrid(capacity: number, maxCapacityX: number, pointCount: number): number[] {
+  const top = capacity * maxCapacityX;
+  const grid: number[] = [];
+  for (let i = 0; i <= pointCount; i++) {
+    grid.push((i / pointCount) * top);
+  }
+  return grid;
+}
 
 // ============================================================================
 // CAPACITY SWEEP CHART — re-runs the optimiser at multiple battery capacities
@@ -33,7 +44,8 @@ type SweepResults = { points: SweepPoint[]; scalePower: boolean };
 
 export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
-  yearOneFadePct, longTermFadePct }: {
+  yearOneFadePct, longTermFadePct,
+  runOptimizeBeforeSweep }: {
     basePrice: number[];
     baseWind: number[];
     baseParams: OptimizationParams;
@@ -44,6 +56,8 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     lifetimeYears: number;
     yearOneFadePct: number;
     longTermFadePct: number;
+    /** When set, clicking "Run sizing sweep" runs full dispatch optimization first, then the sweep. */
+    runOptimizeBeforeSweep?: () => Promise<OptimizationRunResult | null>;
   }) => {
   const [results, setResults] = useState<SweepResults | null>(null);
   const [running, setRunning] = useState(false);
@@ -59,17 +73,13 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   const periodHours = basePrice.length * dt;
   const periodToAnnual = 8760 / Math.max(1, periodHours);
 
-  // Sweep grid: linear from 0 to maxCapacityX × baseParams.capacity (inclusive)
-  const sweepGrid = useMemo(() => {
-    const top = baseParams.capacity * maxCapacityX;
-    const grid = [];
-    for (let i = 0; i <= pointCount; i++) {
-      grid.push((i / pointCount) * top);
-    }
-    return grid;
-  }, [baseParams.capacity, maxCapacityX, pointCount]);
+  const runSweep = useCallback(async (fresh?: OptimizationRunResult | null) => {
+    const bp = fresh?.pricePeriod ?? basePrice;
+    const bw = fresh?.windPeriod ?? baseWind;
+    const bpars = fresh?.params ?? baseParams;
+    const sweepDt = fresh?.dt ?? dt;
+    const grid = buildSweepGrid(bpars.capacity, maxCapacityX, pointCount);
 
-  const runSweep = useCallback(async () => {
     const gen = ++sweepGenRef.current;
     setRunning(true); setProgress(0); setResults(null);
     try {
@@ -79,13 +89,13 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       const out: SweepPoint[] = [];
       // Always include a true 0-MWh baseline first (generation only) — analytic, no DP needed.
       let baseRevenue = 0;
-      for (let t = 0; t < basePrice.length; t++) {
-        baseRevenue += baseWind[t] * dt * basePrice[t];
+      for (let t = 0; t < bp.length; t++) {
+        baseRevenue += bw[t] * sweepDt * bp[t];
       }
 
-      for (let i = 0; i < sweepGrid.length; i++) {
+      for (let i = 0; i < grid.length; i++) {
         if (sweepGenRef.current !== gen) return;
-        const cap = sweepGrid[i];
+        const cap = grid[i]!;
         let totalRev;
         if (cap < 1e-6) {
           totalRev = baseRevenue;
@@ -93,12 +103,12 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           // Scale charge/discharge limits proportionally if the user wants
           // 1C-style sizing (more MWh ⇒ more MW). Otherwise hold them at the
           // sidebar values, answering "given my inverter, how many MWh?"
-          const cMax = scalePower ? cap * (baseParams.chargeMax / baseParams.capacity)
-            : baseParams.chargeMax;
-          const dMax = scalePower ? cap * (baseParams.dischargeMax / baseParams.capacity)
-            : baseParams.dischargeMax;
-          const params = { ...baseParams, capacity: cap, chargeMax: cMax, dischargeMax: dMax };
-          const { traj } = await runOptimizationDelegated(basePrice, baseWind, params);
+          const cMax = scalePower ? cap * (bpars.chargeMax / bpars.capacity)
+            : bpars.chargeMax;
+          const dMax = scalePower ? cap * (bpars.dischargeMax / bpars.capacity)
+            : bpars.dischargeMax;
+          const params = { ...bpars, capacity: cap, chargeMax: cMax, dischargeMax: dMax };
+          const { traj } = await runOptimizationDelegated(bp, bw, params);
           if (sweepGenRef.current !== gen) return;
           totalRev = sweepTrajTotalRevenue(traj);
         }
@@ -110,7 +120,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           upliftPct: baseRevenue > 0 ? ((totalRev - baseRevenue) / baseRevenue) * 100 : 0,
           marginalEurPerMWh: 0,
         });
-        setProgress((i + 1) / sweepGrid.length);
+        setProgress((i + 1) / grid.length);
       }
 
       if (sweepGenRef.current !== gen) return;
@@ -132,7 +142,17 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     } finally {
       if (sweepGenRef.current === gen) setRunning(false);
     }
-  }, [basePrice, baseWind, baseParams, dt, sweepGrid, scalePower]);
+  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower]);
+
+  const onRunSizingSweep = useCallback(async () => {
+    if (runOptimizeBeforeSweep) {
+      const fresh = await runOptimizeBeforeSweep();
+      if (!fresh) return;
+      await runSweep(fresh);
+    } else {
+      await runSweep();
+    }
+  }, [runOptimizeBeforeSweep, runSweep]);
 
   // Capacity fade curve & multi-year NPV factor for Option B.
   // fadeNpvFactor multiplies a "year-1 uplift" to give the levelised annual
@@ -261,6 +281,13 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   }, [results]);
 
   return (
+    <>
+      <FullScreenJobOverlay
+        open={running}
+        eyebrow="Sizing & dispatch sweep"
+        title="Running sizing sweep"
+        progress={progress}
+      />
     <div className="card p-5">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <div>
@@ -270,7 +297,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
             {pointCount + 1} points from 0 to {(baseParams.capacity * maxCapacityX).toFixed(0)} MWh
           </div>
         </div>
-        <button onClick={runSweep} disabled={running}
+        <button onClick={() => { void onRunSizingSweep(); }} disabled={running}
           className="btn-primary"
           style={{ padding: '10px 18px', fontSize: 13 }}>
           {running ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -926,5 +953,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
         </>
       )}
     </div>
+    </>
   );
 });
