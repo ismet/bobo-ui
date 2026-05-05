@@ -44,8 +44,8 @@ export default function App() {
   const [installedCapacityMW, setInstalledCapacityMW] = useState<number>(23); // (draft)
   const [systemDesignOpen, setSystemDesignOpen] = useState(true);
 
-  // Time step in hours (1.0 = hourly, 0.25 = 15 min, 0.5 = 30 min, etc.)
-  const [dt, setDt] = useState(1.0); // (draft)
+  // Time step in hours (fixed): each row in data = 1 hour.
+  const dt = 1.0;
 
   // Solution grid resolution (max MWh per SOC step). null = auto.
   // Finer grids give more precise dispatch but are slower. Default 1 MWh.
@@ -159,7 +159,6 @@ export default function App() {
       windScale,
       initialSOC,
       installedCapacityMW ?? '',
-      dt,
       targetDsoc ?? 'auto',
       chargeFromGrid ? 1 : 0,
       wearCost,
@@ -183,7 +182,6 @@ export default function App() {
     windScale,
     initialSOC,
     installedCapacityMW,
-    dt,
     targetDsoc,
     chargeFromGrid,
     wearCost,
@@ -314,7 +312,6 @@ export default function App() {
     const snapWindScale = windScale;
     const snapInitialSOC = initialSOC;
     const snapInstalledCapacityMW = installedCapacityMW;
-    const snapDt = dt;
     const snapTargetDsoc = targetDsoc;
     const snapChargeFromGrid = chargeFromGrid;
     const snapWearCost = wearCost;
@@ -346,7 +343,7 @@ export default function App() {
         dischargeEff: snapDischargeEff,
         initialSOCFrac: snapInitialSOC,
         socSteps,
-        dt: snapDt,
+        dt,
         targetDsoc: snapTargetDsoc,
         chargeFromGrid: snapChargeFromGrid,
         wearCost: snapWearCost,
@@ -376,7 +373,7 @@ export default function App() {
         ipcOverheadMs: Math.max(0, wallMs - workerMs),
         usedWorker,
         dateRangeLabel,
-        dt: snapDt,
+        dt,
       });
     } catch (e) {
       if (optimGenRef.current !== gen) return;
@@ -398,7 +395,6 @@ export default function App() {
     windScale,
     initialSOC,
     installedCapacityMW,
-    dt,
     targetDsoc,
     chargeFromGrid,
     wearCost,
@@ -511,28 +507,6 @@ export default function App() {
                 </div>
                 <div className="hairline my-4"></div>
                 <div>
-                  <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono mb-2">Time interval</div>
-                  <div className="grid grid-cols-4 gap-1 mb-2">
-                    {([
-                      [0.25, '15 min'],
-                      [0.5, '30 min'],
-                      [1.0, '1 hr'],
-                      [2.0, '2 hr'],
-                    ] as const).map(([v, lbl]) => (
-                      <button key={v} onClick={() => setDt(v)}
-                        className={`py-2 text-xs font-mono border transition-colors ${Math.abs(dt - v) < 1e-6
-                            ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
-                            : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
-                          }`}>{lbl}</button>
-                    ))}
-                  </div>
-                  <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
-                    each row in your data = {dt < 1 ? `${(dt * 60).toFixed(0)} min` : `${dt} h`} ·
-                    &nbsp;{availableSteps.toLocaleString()} steps = {availableHours.toLocaleString()} h available
-                  </div>
-                </div>
-                <div className="hairline my-4"></div>
-                <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">Optimization resolution</div>
                     <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
@@ -570,6 +544,9 @@ export default function App() {
                     <div className="text-[10px] font-mono text-[color:var(--text-faint)]">
                       {horizonHours.toLocaleString()}h · {horizonSteps.toLocaleString()} steps
                     </div>
+                  </div>
+                  <div className="text-[10px] font-mono text-[color:var(--text-faint)] mb-2">
+                    each row in your data = {dt} h · {availableSteps.toLocaleString()} steps = {availableHours.toLocaleString()} h available
                   </div>
                   {hasPendingChanges && (
                     <div className="mb-2 text-[10px] font-mono text-[color:var(--accent-amber)]">
