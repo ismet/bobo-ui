@@ -24,6 +24,7 @@ import {
   formatLocalYMD,
   fingerprintSeriesSample,
   normalizePowerPlantsPayload,
+  ymdToUtcMidnightMs,
 } from './formatUtils';
 import { runOptimizationDelegated } from './engine/optimizationRunner';
 import type { OptimizationParams } from './engine/types';
@@ -392,6 +393,8 @@ export default function App() {
       const ph = fingerprintSeriesSample(pricePeriod, windPeriod);
       const spotWindRescaleKey = `${n}:${ph}`;
 
+      const chartEpochUtcMs = snapSelectedPlantId ? ymdToUtcMidnightMs(snapBoboStartDate) : undefined;
+
       const applied: OptimizationRunResult = {
         traj,
         params,
@@ -402,6 +405,7 @@ export default function App() {
         ipcOverheadMs: Math.max(0, wallMs - workerMs),
         usedWorker,
         dateRangeLabel,
+        chartEpochUtcMs,
         dt,
       };
       setAppliedScenarioKey(snapKey);

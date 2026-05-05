@@ -84,11 +84,12 @@ export function LegendChip({ swatch, label, isoKey, iso }: {
   );
 }
 
-export function ZoomBadge({ zoom, dataLength, dt, traj }: {
+export function ZoomBadge({ zoom, dataLength, dt, traj, epochUtcMs }: {
   zoom: ReturnType<typeof useZoom>;
   dataLength: number;
   dt: number;
   traj: TrajectoryStep[];
+  epochUtcMs?: number;
 }) {
   if (!zoom.isZoomed) {
     return (
@@ -104,7 +105,7 @@ export function ZoomBadge({ zoom, dataLength, dt, traj }: {
   return (
     <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <span className="text-[10px] font-mono" style={{ color: 'var(--accent-teal)' }}>
-        zoom {tsLabel(a.t * dt, dt < 1)} → {tsLabel(b.t * dt, dt < 1)} · {span.toFixed(1)}h
+        zoom {tsLabel(a.t * dt, dt < 1, epochUtcMs)} → {tsLabel(b.t * dt, dt < 1, epochUtcMs)} · {span.toFixed(1)}h
       </span>
       <button onClick={zoom.reset}
               style={{ padding: '2px 8px', border: '1px solid var(--border)',

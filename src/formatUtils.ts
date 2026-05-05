@@ -31,9 +31,20 @@ export function fingerprintSeriesSample(pricePeriod: number[], windPeriod: numbe
   return idxs.map((i) => `${pricePeriod[i]},${windPeriod[i]}`).join('|');
 }
 
-export function tsLabel(hourOffset: number, showTime = false): string {
+/** Hourly charts default to bundled sample horizon (2024); EPİAŞ plant loads override via `chartEpochUtcMs`. */
+export const DEFAULT_TS_EPOCH_MS = Date.UTC(2024, 0, 1);
+
+export function ymdToUtcMidnightMs(ymd: string): number {
+  const parts = ymd.split('-').map(Number);
+  const y = parts[0]!;
+  const m = parts[1]!;
+  const d = parts[2]!;
+  return Date.UTC(y, m - 1, d);
+}
+
+export function tsLabel(hourOffset: number, showTime = false, epochUtcMs: number = DEFAULT_TS_EPOCH_MS): string {
   const ms = hourOffset * 3600 * 1000;
-  const d = new Date(Date.UTC(2024, 0, 1) + ms);
+  const d = new Date(epochUtcMs + ms);
   const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]!;
   const dd = d.getUTCDate().toString().padStart(2,'0');
   if (showTime) {

@@ -226,7 +226,7 @@ export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) 
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Plant &amp; market inputs</div>
           <div className="font-display text-lg">
             Spot price &amp; plant generation
-            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} />
+            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} epochUtcMs={result.chartEpochUtcMs} />
           </div>
         </div>
         <div className="flex gap-3 text-[11px] font-mono text-[color:var(--text-dim)]">
@@ -240,13 +240,13 @@ export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) 
         <ResponsiveContainer>
           <ComposedChart key={zoom.resetKey} data={data} margin={{ top: 5, right: 16, left: -8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
-            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}
+            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}
                    minTickGap={60} stroke="var(--text-faint)"/>
             <YAxis yAxisId="left" stroke="var(--text-faint)" width={44}
                    label={{ value: '€/MWh', angle: -90, position: 'insideLeft', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
             <YAxis yAxisId="right" orientation="right" stroke="var(--text-faint)" width={44}
                    label={{ value: 'MW', angle: 90, position: 'insideRight', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
-            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}/>}/>
+            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
             <Area yAxisId="right" type="monotone" dataKey="wind" name="generation" hide={!iso.active('wind')}
                   fill="var(--accent-amber)" fillOpacity={0.25} stroke="var(--accent-amber)" strokeWidth={1.2}/>
             <Line yAxisId="left" type="monotone" dataKey="price" name="price" hide={!iso.active('price')}
@@ -254,7 +254,7 @@ export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) 
             <Brush dataKey="idx" height={26} stroke="var(--accent-teal)"
                    fill="var(--bg)" travellerWidth={8}
                    onChange={zoom.onChange}
-                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false)}/>
+                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false, result.chartEpochUtcMs)}/>
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -282,7 +282,7 @@ export const DispatchChart = memo(({ result }: { result: OptimizationRunResult }
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Dispatch &amp; state of charge</div>
           <div className="font-display text-lg">
             Stored energy &amp; charge / discharge power
-            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} />
+            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} epochUtcMs={result.chartEpochUtcMs} />
           </div>
         </div>
         <div className="flex gap-3 text-[11px] font-mono text-[color:var(--text-dim)]">
@@ -298,13 +298,13 @@ export const DispatchChart = memo(({ result }: { result: OptimizationRunResult }
         <ResponsiveContainer>
           <ComposedChart key={zoom.resetKey} data={data} margin={{ top: 5, right: 16, left: -8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
-            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}
+            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}
                    minTickGap={60} stroke="var(--text-faint)"/>
             <YAxis yAxisId="left" stroke="var(--text-faint)" width={44}
                    label={{ value: 'MWh', angle: -90, position: 'insideLeft', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
             <YAxis yAxisId="right" orientation="right" stroke="var(--text-faint)" width={44}
                    label={{ value: 'MW', angle: 90, position: 'insideRight', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
-            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}/>}/>
+            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
             <ReferenceLine y={0} yAxisId="right" stroke="var(--border-strong)" strokeDasharray="2 2"/>
             <Bar yAxisId="right" dataKey="discharge" name="discharge" hide={!iso.active('discharge')}
                  fill="var(--accent-teal)" fillOpacity={0.7}/>
@@ -315,7 +315,7 @@ export const DispatchChart = memo(({ result }: { result: OptimizationRunResult }
             <Brush dataKey="idx" height={26} stroke="var(--accent-violet)"
                    fill="var(--bg)" travellerWidth={8}
                    onChange={zoom.onChange}
-                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false)}/>
+                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false, result.chartEpochUtcMs)}/>
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -351,7 +351,7 @@ export const BatteryVsPriceChart = memo(({ result }: { result: OptimizationRunRe
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Market-aligned dispatch</div>
           <div className="font-display text-lg">
             Battery action vs spot price
-            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} />
+            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} epochUtcMs={result.chartEpochUtcMs} />
           </div>
         </div>
         <div className="flex flex-wrap gap-3 text-[11px] font-mono text-[color:var(--text-dim)]">
@@ -368,13 +368,13 @@ export const BatteryVsPriceChart = memo(({ result }: { result: OptimizationRunRe
         <ResponsiveContainer>
           <ComposedChart key={zoom.resetKey} data={data} margin={{ top: 5, right: 16, left: -8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
-            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}
+            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}
                    minTickGap={60} stroke="var(--text-faint)"/>
             <YAxis yAxisId="left" stroke="var(--text-faint)" width={48}
                    label={{ value: '€/MWh', angle: -90, position: 'insideLeft', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
             <YAxis yAxisId="right" orientation="right" stroke="var(--text-faint)" width={44}
                    label={{ value: 'MW', angle: 90, position: 'insideRight', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
-            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}/>}/>
+            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
             <ReferenceLine y={0} yAxisId="right" stroke="var(--border-strong)" strokeDasharray="2 2"/>
             <ReferenceLine y={avgPrice} yAxisId="left" stroke="var(--text-faint)" strokeDasharray="3 3" strokeWidth={1}/>
             <Bar yAxisId="right" dataKey="discharge" name="discharge" hide={!iso.active('discharge')}
@@ -386,7 +386,7 @@ export const BatteryVsPriceChart = memo(({ result }: { result: OptimizationRunRe
             <Brush dataKey="idx" height={26} stroke="var(--accent-amber)"
                    fill="var(--bg)" travellerWidth={8}
                    onChange={zoom.onChange}
-                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false)}/>
+                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false, result.chartEpochUtcMs)}/>
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -416,7 +416,7 @@ export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) 
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">BESS value stack</div>
           <div className="font-display text-lg">
             Plant-only vs hybrid revenue
-            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} />
+            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} epochUtcMs={result.chartEpochUtcMs} />
           </div>
         </div>
         <div className="flex gap-3 text-[11px] font-mono text-[color:var(--text-dim)]">
@@ -438,10 +438,10 @@ export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) 
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
-            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}
+            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}
                    minTickGap={60} stroke="var(--text-faint)"/>
             <YAxis stroke="var(--text-faint)" tickFormatter={v => fmtMoney(v)} width={60}/>
-            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime)}/>}/>
+            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
             <Area type="monotone" dataKey="uplift" name="uplift (€)" hide={!iso.active('uplift')}
                   fill="url(#upliftGrad)" stroke="var(--accent-green)" strokeWidth={1}/>
             <Line type="monotone" dataKey="windOnly" name="generation-only (€)" hide={!iso.active('windOnly')}
@@ -451,7 +451,7 @@ export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) 
             <Brush dataKey="idx" height={26} stroke="var(--accent-green)"
                    fill="var(--bg)" travellerWidth={8}
                    onChange={zoom.onChange}
-                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false)}/>
+                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false, result.chartEpochUtcMs)}/>
           </ComposedChart>
         </ResponsiveContainer>
       </div>

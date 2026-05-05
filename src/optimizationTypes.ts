@@ -11,5 +11,7 @@ export interface OptimizationRunResult {
   ipcOverheadMs: number;
   usedWorker: boolean;
   dateRangeLabel: string;
+  /** UTC midnight of first calendar day in plant date range; omit for bundled/pasted series (uses default chart epoch). */
+  chartEpochUtcMs?: number;
   dt: number;
 }
