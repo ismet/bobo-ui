@@ -11,6 +11,10 @@ export interface OptimizationParams {
   targetDsoc: number | null;
   chargeFromGrid?: boolean;
   wearCost?: number;
+  /** Wind/solar installed capacity (MW). When set, this is the hard grid export
+   *  limit for the hybrid plant — the connection is sized to the generator, not
+   *  the battery inverter. Used as the sweep's fixed export ceiling. */
+  installedCapacityMW?: number;
 }
 
 export interface TrajectoryStep {

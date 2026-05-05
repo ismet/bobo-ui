@@ -39,6 +39,9 @@ export default function App() {
   const [dischargeEff, setDischargeEff] = useState(0.95); // frac
   const [windScale, setWindScale] = useState(1.0);
   const [initialSOC, setInitialSOC] = useState(0.5);
+  // Wind/solar installed capacity (MW) — sets the hard grid export ceiling.
+  // null = use max(chargeMax, dischargeMax) as before.
+  const [installedCapacityMW, setInstalledCapacityMW] = useState<number>(23);
   const [systemDesignOpen, setSystemDesignOpen] = useState(true);
 
   // Time step in hours (1.0 = hourly, 0.25 = 15 min, 0.5 = 30 min, etc.)
@@ -229,7 +232,7 @@ export default function App() {
       const params: OptimizationParams = {
         capacity, chargeMax, dischargeMax, chargeEff, dischargeEff,
         initialSOCFrac: initialSOC, socSteps, dt, targetDsoc, chargeFromGrid,
-        wearCost
+        wearCost, installedCapacityMW,
       };
       const tWall0 = performance.now();
       const { traj, workerMs, usedWorker } = await runOptimizationDelegated(pricePeriod, windPeriod, params);
@@ -258,7 +261,7 @@ export default function App() {
     }
   }, [capacity, chargeMax, dischargeMax, chargeEff, dischargeEff,
     initialSOC, pricePeriod, windPeriod, dateRangeLabel, dt, targetDsoc, chargeFromGrid,
-    wearCost]);
+    wearCost, installedCapacityMW]);
 
   // auto run on mount, when dataset loads,
   // when dt changes, when grid resolution changes, charge source changes,
@@ -329,6 +332,9 @@ export default function App() {
                 </div>
                 <div className="hairline my-4"></div>
                 <div>
+                  <Slider label="Installed capacity (wind/solar)" unit="MW" min={1} max={200} step={1}
+                    value={installedCapacityMW} setValue={setInstalledCapacityMW}
+                    hint={`grid export ceiling · sweep uses this as fixed limit`} />
                   <Slider label="Plant output scaling" unit="×" min={0.25} max={3} step={0.05}
                     value={windScale} setValue={setWindScale}
                     hint={`peak generation ≈ ${(23 * windScale).toFixed(1)} MW (default dataset)`} />

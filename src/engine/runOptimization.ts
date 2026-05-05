@@ -14,10 +14,15 @@ export function runOptimization(
     chargeEff, dischargeEff, initialSOCFrac, socSteps: socStepsHint, dt,
     targetDsoc,
     chargeFromGrid = true,
-    wearCost = 0
+    wearCost = 0,
+    installedCapacityMW,
   } = params;
 
-  const gridLimit = Math.max(chargeMax, dischargeMax);
+  // Grid export ceiling: installed wind/solar capacity when provided (the
+  // connection is sized to the generator), otherwise the larger inverter limit.
+  const gridLimit = installedCapacityMW != null && installedCapacityMW > 0
+    ? installedCapacityMW
+    : Math.max(chargeMax, dischargeMax);
   const GRID_TOL = 1e-6;
 
   const MAX_STEPS = 600;
