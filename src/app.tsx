@@ -59,20 +59,20 @@ export default function App() {
   // OPTION A: per-MWh wear cost charged against battery throughput in the DP.
   //   Pulls the optimiser toward economically rational cycling. €20/MWh is a
   //   reasonable default for utility-scale Li-ion at 250 €/kWh CAPEX.
-  const [wearCost, setWearCost] = useState(20);                 // €/MWh
+  const [wearCost, setWearCost] = useState(5);                 // €/MWh
   // OPTION B: capacity fade applied year-over-year as the asset ages.
   //   Year-1 fade is highest (SEI growth), declining toward an asymptote.
   //   Defaults match typical Li-ion: ~2.5%/yr year-1 trending to ~0.7%/yr.
   //   End-of-life retention is *derived* from these rates + lifetime — see
   //   buildFadeCurve. With the defaults (2.5%/0.7%/20y, τ=4y) EoL ≈ 78%.
-  const [yearOneFadePct, setYearOneFadePct] = useState(2.5);    // % year 1
-  const [longTermFadePct, setLongTermFadePct] = useState(0.7);  // % long term
+  const [yearOneFadePct, setYearOneFadePct] = useState(1.0);    // % year 1
+  const [longTermFadePct, setLongTermFadePct] = useState(1.0);  // % long term
   // ---------------------------------------------------------------------------
 
   // ---- Financial parameters --------------------------------------------------
   // Battery cost: € per kWh of energy capacity (industry-standard quoting).
   //   2024 typical Li-ion utility-scale cost: ~250–350 €/kWh (BNEF, NREL).
-  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(250); // €/kWh
+  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(5); // €/kWh
   const [interestRatePct, setInterestRatePct] = useState(9.5); // %
   const [lifetimeYears, setLifetimeYears] = useState(20);  // years
 
@@ -559,7 +559,7 @@ export default function App() {
                   />
                   <OutputTable result={result} />
 
-                  <div className="my-10"></div>
+                  {/* <div className="my-10"></div>
                   <SectionHeader eyebrow="09 · notes"
                     title="Model scope (dispatch layer)"
                   />
@@ -586,7 +586,7 @@ export default function App() {
                         • Dedicated grid export breaker settings (table may show combined plant + BESS)<br />
                         • Uncertain prices or forecasts (perfect foresight on uploaded series)</p>
                     </div>
-                  </div>
+                  </div> */}
                 </>
               )}
             </div>
