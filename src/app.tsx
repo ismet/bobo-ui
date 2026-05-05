@@ -32,49 +32,49 @@ import { SectionHeader, Slider } from './uiPrimitives';
 
 export default function App() {
   // Parameters
-  const [capacity, setCapacity] = useState(11);   // MWh
-  const [chargeMax, setChargeMax] = useState(6);    // MW
-  const [dischargeMax, setDischargeMax] = useState(11);   // MW
-  const [chargeEff, setChargeEff] = useState(0.93); // frac
-  const [dischargeEff, setDischargeEff] = useState(0.95); // frac
-  const [windScale, setWindScale] = useState(1.0);
-  const [initialSOC, setInitialSOC] = useState(0.5);
+  const [capacity, setCapacity] = useState(11);   // MWh (draft)
+  const [chargeMax, setChargeMax] = useState(6);    // MW (draft)
+  const [dischargeMax, setDischargeMax] = useState(11);   // MW (draft)
+  const [chargeEff, setChargeEff] = useState(0.93); // frac (draft)
+  const [dischargeEff, setDischargeEff] = useState(0.95); // frac (draft)
+  const [windScale, setWindScale] = useState(1.0); // (draft)
+  const [initialSOC, setInitialSOC] = useState(0.5); // (draft)
   // Wind/solar installed capacity (MW) — sets the hard grid export ceiling.
   // null = use max(chargeMax, dischargeMax) as before.
-  const [installedCapacityMW, setInstalledCapacityMW] = useState<number>(23);
+  const [installedCapacityMW, setInstalledCapacityMW] = useState<number>(23); // (draft)
   const [systemDesignOpen, setSystemDesignOpen] = useState(true);
 
   // Time step in hours (1.0 = hourly, 0.25 = 15 min, 0.5 = 30 min, etc.)
-  const [dt, setDt] = useState(1.0);
+  const [dt, setDt] = useState(1.0); // (draft)
 
   // Solution grid resolution (max MWh per SOC step). null = auto.
   // Finer grids give more precise dispatch but are slower. Default 1 MWh.
-  const [targetDsoc, setTargetDsoc] = useState<number | null>(1.0);
+  const [targetDsoc, setTargetDsoc] = useState<number | null>(1.0); // (draft)
 
   // Whether the battery may import energy from the grid to charge.
   // false = on-site generation only for charging (no grid imports).
-  const [chargeFromGrid, setChargeFromGrid] = useState(true);
+  const [chargeFromGrid, setChargeFromGrid] = useState(true); // (draft)
 
   // ---- Degradation parameters -----------------------------------------------
   // OPTION A: per-MWh wear cost charged against battery throughput in the DP.
   //   Pulls the optimiser toward economically rational cycling. €20/MWh is a
   //   reasonable default for utility-scale Li-ion at 250 €/kWh CAPEX.
-  const [wearCost, setWearCost] = useState(5);                 // €/MWh
+  const [wearCost, setWearCost] = useState(5);                 // €/MWh (draft)
   // OPTION B: capacity fade applied year-over-year as the asset ages.
   //   Year-1 fade is highest (SEI growth), declining toward an asymptote.
   //   Defaults match typical Li-ion: ~2.5%/yr year-1 trending to ~0.7%/yr.
   //   End-of-life retention is *derived* from these rates + lifetime — see
   //   buildFadeCurve. With the defaults (2.5%/0.7%/20y, τ=4y) EoL ≈ 78%.
-  const [yearOneFadePct, setYearOneFadePct] = useState(1.0);    // % year 1
-  const [longTermFadePct, setLongTermFadePct] = useState(1.0);  // % long term
+  const [yearOneFadePct, setYearOneFadePct] = useState(1.0);    // % year 1 (draft)
+  const [longTermFadePct, setLongTermFadePct] = useState(1.0);  // % long term (draft)
   // ---------------------------------------------------------------------------
 
   // ---- Financial parameters --------------------------------------------------
   // Battery cost: € per kWh of energy capacity (industry-standard quoting).
   //   2024 typical Li-ion utility-scale cost: ~250–350 €/kWh (BNEF, NREL).
-  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(5); // €/kWh
-  const [interestRatePct, setInterestRatePct] = useState(9.5); // %
-  const [lifetimeYears, setLifetimeYears] = useState(20);  // years
+  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(5); // €/kWh (draft)
+  const [interestRatePct, setInterestRatePct] = useState(9.5); // % (draft)
+  const [lifetimeYears, setLifetimeYears] = useState(20);  // years (draft)
 
   // Capital recovery factor: CRF = i(1+i)^n / ((1+i)^n - 1)
   // For i = 9.5%, n = 20 → CRF ≈ 0.1142 (each € of CAPEX costs €0.1142/yr).
@@ -88,12 +88,12 @@ export default function App() {
 
   type SeriesData = { price: number[]; wind: number[] };
 
-  // User-pasted dataset (null = use embedded default)
+  // User-pasted dataset (null = use embedded default) (draft)
   const [customData, setCustomData] = useState<SeriesData | null>(null);
-  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null);
+  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null); // (draft)
   const initialBoboDateRange = useMemo(() => boboDefaultDateRange(), []);
-  const [boboStartDate, setBoboStartDate] = useState(initialBoboDateRange.startDate);
-  const [boboEndDate, setBoboEndDate] = useState(initialBoboDateRange.endDate);
+  const [boboStartDate, setBoboStartDate] = useState(initialBoboDateRange.startDate); // (draft)
+  const [boboEndDate, setBoboEndDate] = useState(initialBoboDateRange.endDate); // (draft)
   const [hasUnappliedChanges, setHasUnappliedChanges] = useState(true);
 
   const setCustomDataWithSource = useCallback((data: SeriesData | null, fromBobo = false) => {
@@ -110,6 +110,91 @@ export default function App() {
   const seriesAbortRef = useRef<AbortController | null>(null);
   const seriesFetchGenRef = useRef(0);
   const optimGenRef = useRef(0);
+
+  // ---------------------------------------------------------------------------
+  // Applied (committed) snapshot — used by all charts/results.
+  // Nothing updates until the user presses Optimize.
+  // ---------------------------------------------------------------------------
+  const [appliedScenarioKey, setAppliedScenarioKey] = useState<string | null>(null);
+  const [appliedResult, setAppliedResult] = useState<OptimizationRunResult | null>(null);
+  const [appliedBatteryCostPerKWh, setAppliedBatteryCostPerKWh] = useState<number | null>(null);
+  const [appliedInterestRatePct, setAppliedInterestRatePct] = useState<number | null>(null);
+  const [appliedLifetimeYears, setAppliedLifetimeYears] = useState<number | null>(null);
+  const [appliedYearOneFadePct, setAppliedYearOneFadePct] = useState<number | null>(null);
+  const [appliedLongTermFadePct, setAppliedLongTermFadePct] = useState<number | null>(null);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const appliedCrf = useMemo(() => {
+    const iPct = appliedInterestRatePct ?? interestRatePct;
+    const nY = appliedLifetimeYears ?? lifetimeYears;
+    const i = iPct / 100;
+    if (i <= 0) return 1 / nY;
+    const f = Math.pow(1 + i, nY);
+    return (i * f) / (f - 1);
+  }, [appliedInterestRatePct, appliedLifetimeYears, interestRatePct, lifetimeYears]);
+
+  const defaultSeriesFingerprint = useMemo(() => {
+    const n = PRICE_DATA.length;
+    const ph = fingerprintSeriesSample(PRICE_DATA, WIND_DATA);
+    return `${n}:${ph}`;
+  }, []);
+
+  const draftScenarioKey = useMemo(() => {
+    const n = customData ? customData.price.length : PRICE_DATA.length;
+    const ph = customData ? fingerprintSeriesSample(customData.price, customData.wind) : defaultSeriesFingerprint.split(':')[1]!;
+    const seriesKey = `${n}:${ph}`;
+    // Keep key stable + cheap to compare; stringify primitives only.
+    return [
+      'v1',
+      seriesKey,
+      selectedPlantId ?? '',
+      boboStartDate,
+      boboEndDate,
+      capacity,
+      chargeMax,
+      dischargeMax,
+      chargeEff,
+      dischargeEff,
+      windScale,
+      initialSOC,
+      installedCapacityMW ?? '',
+      dt,
+      targetDsoc ?? 'auto',
+      chargeFromGrid ? 1 : 0,
+      wearCost,
+      batteryCostPerKWh,
+      interestRatePct,
+      lifetimeYears,
+      yearOneFadePct,
+      longTermFadePct,
+    ].join('|');
+  }, [
+    customData,
+    defaultSeriesFingerprint,
+    selectedPlantId,
+    boboStartDate,
+    boboEndDate,
+    capacity,
+    chargeMax,
+    dischargeMax,
+    chargeEff,
+    dischargeEff,
+    windScale,
+    initialSOC,
+    installedCapacityMW,
+    dt,
+    targetDsoc,
+    chargeFromGrid,
+    wearCost,
+    batteryCostPerKWh,
+    interestRatePct,
+    lifetimeYears,
+    yearOneFadePct,
+    longTermFadePct,
+  ]);
+
+  const hasPendingChanges = appliedScenarioKey == null || appliedScenarioKey !== draftScenarioKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -205,34 +290,67 @@ export default function App() {
     await fetchPlantSeries(selectedPlantId, boboStartDate, boboEndDate);
   }, [seriesLoading, selectedPlantId, boboStartDate, boboEndDate, fetchPlantSeries]);
 
-  const [result, setResult] = useState<OptimizationRunResult | null>(null);
-  const [running, setRunning] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  // Active data source
-  const activePrice = useMemo(() => customData ? customData.price : PRICE_DATA, [customData]);
-  const activeWind = useMemo(() => customData ? customData.wind : WIND_DATA, [customData]);
-  const availableHours = activePrice.length * dt;          // total hours covered by dataset
-  const availableSteps = activePrice.length;               // raw point count
+  // Draft data source (for labels/hints only)
+  const draftActivePrice = useMemo(() => customData ? customData.price : PRICE_DATA, [customData]);
+  const draftActiveWind = useMemo(() => customData ? customData.wind : WIND_DATA, [customData]);
+  const availableHours = draftActivePrice.length * dt;          // total hours covered by dataset
+  const availableSteps = draftActivePrice.length;               // raw point count
   const horizonHours = availableHours;
   const horizonSteps = availableSteps;
-  const dateRangeLabel = selectedPlantId ? `${boboStartDate} -> ${boboEndDate}` : 'Loaded dataset';
 
-  // Slice data
-  const pricePeriod = useMemo(() => activePrice.slice(0, horizonSteps), [activePrice, horizonSteps]);
-  const windPeriod = useMemo(() => activeWind.slice(0, horizonSteps).map(w => w * windScale),
-    [activeWind, horizonSteps, windScale]);
+  const optimize = useCallback(async () => {
+    if (running) return;
+    // Snapshot draft at click-time (no partial updates).
+    const snapCustomData = customData;
+    const snapSelectedPlantId = selectedPlantId;
+    const snapBoboStartDate = boboStartDate;
+    const snapBoboEndDate = boboEndDate;
 
-  const runOptim = useCallback(async () => {
+    const snapCapacity = capacity;
+    const snapChargeMax = chargeMax;
+    const snapDischargeMax = dischargeMax;
+    const snapChargeEff = chargeEff;
+    const snapDischargeEff = dischargeEff;
+    const snapWindScale = windScale;
+    const snapInitialSOC = initialSOC;
+    const snapInstalledCapacityMW = installedCapacityMW;
+    const snapDt = dt;
+    const snapTargetDsoc = targetDsoc;
+    const snapChargeFromGrid = chargeFromGrid;
+    const snapWearCost = wearCost;
+
+    const snapBatteryCostPerKWh = batteryCostPerKWh;
+    const snapInterestRatePct = interestRatePct;
+    const snapLifetimeYears = lifetimeYears;
+    const snapYearOneFadePct = yearOneFadePct;
+    const snapLongTermFadePct = longTermFadePct;
+
+    const snapKey = draftScenarioKey;
+
+    const snapPrice = snapCustomData ? snapCustomData.price : PRICE_DATA;
+    const snapWind = snapCustomData ? snapCustomData.wind : WIND_DATA;
+    const pricePeriod = snapPrice.slice(0, snapPrice.length);
+    const windPeriod = snapWind.slice(0, snapWind.length).map(w => w * snapWindScale);
+    const dateRangeLabel = snapSelectedPlantId ? `${snapBoboStartDate} -> ${snapBoboEndDate}` : 'Loaded dataset';
+
     setRunning(true); setErr(null);
     await new Promise(r => setTimeout(r, 20));
     const gen = ++optimGenRef.current;
     try {
       const socSteps = 20;
       const params: OptimizationParams = {
-        capacity, chargeMax, dischargeMax, chargeEff, dischargeEff,
-        initialSOCFrac: initialSOC, socSteps, dt, targetDsoc, chargeFromGrid,
-        wearCost, installedCapacityMW,
+        capacity: snapCapacity,
+        chargeMax: snapChargeMax,
+        dischargeMax: snapDischargeMax,
+        chargeEff: snapChargeEff,
+        dischargeEff: snapDischargeEff,
+        initialSOCFrac: snapInitialSOC,
+        socSteps,
+        dt: snapDt,
+        targetDsoc: snapTargetDsoc,
+        chargeFromGrid: snapChargeFromGrid,
+        wearCost: snapWearCost,
+        installedCapacityMW: snapInstalledCapacityMW,
       };
       const tWall0 = performance.now();
       const { traj, workerMs, usedWorker } = await runOptimizationDelegated(pricePeriod, windPeriod, params);
@@ -241,7 +359,14 @@ export default function App() {
       const n = pricePeriod.length;
       const ph = fingerprintSeriesSample(pricePeriod, windPeriod);
       const spotWindRescaleKey = `${n}:${ph}`;
-      setResult({
+
+      setAppliedScenarioKey(snapKey);
+      setAppliedBatteryCostPerKWh(snapBatteryCostPerKWh);
+      setAppliedInterestRatePct(snapInterestRatePct);
+      setAppliedLifetimeYears(snapLifetimeYears);
+      setAppliedYearOneFadePct(snapYearOneFadePct);
+      setAppliedLongTermFadePct(snapLongTermFadePct);
+      setAppliedResult({
         traj,
         params,
         pricePeriod,
@@ -251,7 +376,7 @@ export default function App() {
         ipcOverheadMs: Math.max(0, wallMs - workerMs),
         usedWorker,
         dateRangeLabel,
-        dt
+        dt: snapDt,
       });
     } catch (e) {
       if (optimGenRef.current !== gen) return;
@@ -259,15 +384,31 @@ export default function App() {
     } finally {
       if (optimGenRef.current === gen) setRunning(false);
     }
-  }, [capacity, chargeMax, dischargeMax, chargeEff, dischargeEff,
-    initialSOC, pricePeriod, windPeriod, dateRangeLabel, dt, targetDsoc, chargeFromGrid,
-    wearCost, installedCapacityMW]);
-
-  // auto run on mount, when dataset loads,
-  // when dt changes, when grid resolution changes, charge source changes,
-  // or wear cost changes.
-  useEffect(() => { runOptim(); /* eslint-disable-next-line */ },
-    [customData, dt, targetDsoc, chargeFromGrid, wearCost]);
+  }, [
+    running,
+    customData,
+    selectedPlantId,
+    boboStartDate,
+    boboEndDate,
+    capacity,
+    chargeMax,
+    dischargeMax,
+    chargeEff,
+    dischargeEff,
+    windScale,
+    initialSOC,
+    installedCapacityMW,
+    dt,
+    targetDsoc,
+    chargeFromGrid,
+    wearCost,
+    batteryCostPerKWh,
+    interestRatePct,
+    lifetimeYears,
+    yearOneFadePct,
+    longTermFadePct,
+    draftScenarioKey,
+  ]);
 
   return (
     <div className="min-h-screen">
@@ -430,7 +571,12 @@ export default function App() {
                       {horizonHours.toLocaleString()}h · {horizonSteps.toLocaleString()} steps
                     </div>
                   </div>
-                  <button onClick={runOptim} disabled={running}
+                  {hasPendingChanges && (
+                    <div className="mb-2 text-[10px] font-mono text-[color:var(--accent-amber)]">
+                      Pending changes
+                    </div>
+                  )}
+                  <button onClick={optimize} disabled={running || !hasPendingChanges}
                     className="btn-primary w-full flex items-center justify-center gap-2">
                     {running ? <><span className="spinner"></span> Optimizing dispatch…</> : <>Optimize dispatch ↗</>}
                   </button>
@@ -474,7 +620,13 @@ export default function App() {
                 capacity={capacity}
                 batteryCostPerKWh={batteryCostPerKWh}
               />
-              <MarketOverview price={pricePeriod} wind={windPeriod} dateRangeLabel={dateRangeLabel} />
+              {appliedResult && (
+                <MarketOverview
+                  price={appliedResult.pricePeriod}
+                  wind={appliedResult.windPeriod}
+                  dateRangeLabel={appliedResult.dateRangeLabel}
+                />
+              )}
             </aside>
           )}
 
@@ -499,30 +651,32 @@ export default function App() {
             )}
             <div className={`min-w-0 ${!systemDesignOpen ? 'pl-11 lg:pl-10' : ''}`}>
               <SectionHeader eyebrow="02 · plant BESS results" title="Revenue & utilization"
-                kicker={result ? `${result.traj.length.toLocaleString()} intervals · optimized dispatch · charging from ${result.params.chargeFromGrid === false ? 'on-site generation only' : 'grid and on-site generation'}.` : 'Preparing dispatch…'} />
-              {result && <KPIRow result={result} />}
-              {result && <ChartsPanel result={result} />}
-              {result && (
+                kicker={appliedResult
+                  ? `${appliedResult.traj.length.toLocaleString()} intervals · optimized dispatch · charging from ${appliedResult.params.chargeFromGrid === false ? 'on-site generation only' : 'grid and on-site generation'}.`
+                  : 'Press Optimize to run dispatch.'} />
+              {appliedResult && <KPIRow result={appliedResult} />}
+              {appliedResult && <ChartsPanel result={appliedResult} />}
+              {appliedResult && (
                 <>
                   <SectionHeader eyebrow="03 · dispatch &amp; cycling"
                     title="Stored energy and power, hour by hour"
                     kicker="Recommended schedule from dispatch optimization—state of charge plus charge/discharge power. Bars above zero export to the grid; below zero draw power for charging."
                   />
-                  <DispatchChart result={result} />
+                  <DispatchChart result={appliedResult} />
 
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="04 · market-aligned operation"
                     title="Dispatch vs wholesale price"
                     kicker="Same optimized schedule against the market—energy shifted to high-price hours, replenished in low-price hours."
                   />
-                  <BatteryVsPriceChart result={result} />
+                  <BatteryVsPriceChart result={appliedResult} />
 
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="05 · value from storage"
                     title="Extra revenue from co-located BESS"
                     kicker="Generation-only revenue vs plant + battery—the gap is the incremental value your system delivers at this site."
                   />
-                  <UpliftChart result={result} />
+                  <UpliftChart result={appliedResult} />
 
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="06 · utilization profile"
@@ -530,8 +684,8 @@ export default function App() {
                     kicker="How charge, idle, and discharge hours fall across wholesale price bands—useful for throughput and warranty discussions."
                   />
                   <div className="grid grid-cols-12 gap-6">
-                    <div className="col-span-12 md:col-span-6"><ActionHistogram result={result} /></div>
-                    <div className="col-span-12 md:col-span-6"><PriceDurationCurve result={result} /></div>
+                    <div className="col-span-12 md:col-span-6"><ActionHistogram result={appliedResult} /></div>
+                    <div className="col-span-12 md:col-span-6"><PriceDurationCurve result={appliedResult} /></div>
                   </div>
 
                   <div className="my-10"></div>
@@ -540,16 +694,16 @@ export default function App() {
                     kicker="Repeated dispatch optimization across MWh sizes—typical for quoting modular racks or proving ROI at different pack sizes. Inverter limits match the left panel unless power scales with energy."
                   />
                   <CapacitySweepChart
-                    basePrice={result.pricePeriod}
-                    baseWind={result.windPeriod}
-                    baseParams={result.params}
-                    dt={result.dt}
-                    batteryCostPerKWh={batteryCostPerKWh}
-                    crf={crf}
-                    interestRatePct={interestRatePct}
-                    lifetimeYears={lifetimeYears}
-                    yearOneFadePct={yearOneFadePct}
-                    longTermFadePct={longTermFadePct}
+                    basePrice={appliedResult.pricePeriod}
+                    baseWind={appliedResult.windPeriod}
+                    baseParams={appliedResult.params}
+                    dt={appliedResult.dt}
+                    batteryCostPerKWh={appliedBatteryCostPerKWh ?? batteryCostPerKWh}
+                    crf={appliedCrf}
+                    interestRatePct={appliedInterestRatePct ?? interestRatePct}
+                    lifetimeYears={appliedLifetimeYears ?? lifetimeYears}
+                    yearOneFadePct={appliedYearOneFadePct ?? yearOneFadePct}
+                    longTermFadePct={appliedLongTermFadePct ?? longTermFadePct}
                   />
 
                   <div className="my-10"></div>
@@ -557,7 +711,7 @@ export default function App() {
                     title="Hour-by-hour operation table"
                     kicker="Physical dispatch, throughput, and revenue by interval—export for customer studies, warranty models, or integration specs."
                   />
-                  <OutputTable result={result} />
+                  <OutputTable result={appliedResult} />
 
                   {/* <div className="my-10"></div>
                   <SectionHeader eyebrow="09 · notes"
