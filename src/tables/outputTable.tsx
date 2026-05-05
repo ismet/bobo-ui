@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { OptimizationRunResult } from '../optimizationTypes';
 import type { Trajectory } from '../engine/types';
@@ -155,7 +155,7 @@ const pageBtnStyle = (disabled: boolean) => ({
   cursor: disabled ? 'not-allowed' : 'pointer'
 });
 
-export function OutputTable({ result }: { result: OptimizationRunResult }) {
+export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) => {
   const rows = useMemo(() => buildOperationTable(result), [result]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
@@ -370,4 +370,4 @@ export function OutputTable({ result }: { result: OptimizationRunResult }) {
       </div>
     </div>
   );
-}
+});

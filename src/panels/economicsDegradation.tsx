@@ -1,11 +1,11 @@
 // ============================================================================
 // ECONOMICS CARD — battery cost, interest rate, lifetime → CRF / annualisation
 // ============================================================================
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { fmtMoney } from '../formatUtils';
 
-export function EconomicsCard({
+export const EconomicsCard = memo(({
   batteryCostPerKWh, setBatteryCostPerKWh,
   interestRatePct, setInterestRatePct,
   lifetimeYears, setLifetimeYears,
@@ -19,7 +19,7 @@ export function EconomicsCard({
   setLifetimeYears: (v: number) => void;
   crf: number;
   capacity: number;
-}) {
+}) => {
   const capexK    = batteryCostPerKWh * capacity;       // €/MWh × MWh = € (since €/kWh × MWh × 1000 / 1000 = €/kWh × MWh? no)
   // Actually: cost is €/kWh, capacity is MWh. CAPEX [€] = cost [€/kWh] × capacity [MWh] × 1000 [kWh/MWh]
   const capex     = batteryCostPerKWh * capacity * 1000;
@@ -84,7 +84,7 @@ export function EconomicsCard({
       </div>
     </div>
   );
-}
+});
 
 // ============================================================================
 // DEGRADATION CARD — Option A (per-MWh wear cost) + Option B (capacity fade)
@@ -122,7 +122,7 @@ export function buildFadeCurve(
   return retention;
 }
 
-export function DegradationCard({
+export const DegradationCard = memo(({
   wearCost, setWearCost,
   yearOneFadePct, setYearOneFadePct,
   longTermFadePct, setLongTermFadePct,
@@ -138,7 +138,7 @@ export function DegradationCard({
   lifetimeYears: number;
   capacity: number;
   batteryCostPerKWh: number;
-}) {
+}) => {
   const fadeCurve = useMemo(
     () => buildFadeCurve(lifetimeYears, yearOneFadePct, longTermFadePct),
     [lifetimeYears, yearOneFadePct, longTermFadePct]
@@ -266,4 +266,4 @@ export function DegradationCard({
       </div>
     </div>
   );
-}
+});

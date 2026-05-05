@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -31,7 +31,7 @@ type SweepPoint = {
 
 type SweepResults = { points: SweepPoint[]; scalePower: boolean };
 
-export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
+export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
   yearOneFadePct, longTermFadePct }: {
     basePrice: number[];
@@ -44,7 +44,7 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
     lifetimeYears: number;
     yearOneFadePct: number;
     longTermFadePct: number;
-  }) {
+  }) => {
   const [results, setResults] = useState<SweepResults | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);          // 0..1
@@ -936,4 +936,4 @@ export function CapacitySweepChart({ basePrice, baseWind, baseParams, dt,
       )}
     </div>
   );
-}
+});

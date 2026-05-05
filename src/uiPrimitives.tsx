@@ -1,14 +1,14 @@
 // ============================================================================
 // UI SUB-COMPONENTS
 // ============================================================================
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 
-export function SectionHeader({ eyebrow, title, kicker, action }: {
+export const SectionHeader = memo(({ eyebrow, title, kicker, action }: {
   eyebrow: string;
   title: string;
   kicker?: string;
   action?: ReactNode;
-}) {
+}) => {
   return (
     <div className="mb-5">
       <div className="chip mb-3">{eyebrow}</div>
@@ -19,9 +19,9 @@ export function SectionHeader({ eyebrow, title, kicker, action }: {
       {kicker && <p className="text-sm text-[color:var(--text-dim)] mt-2 max-w-2xl">{kicker}</p>}
     </div>
   );
-}
+});
 
-export function Slider({ label, unit, value, setValue, min, max, step, hint }: {
+export const Slider = memo(({ label, unit, value, setValue, min, max, step, hint }: {
   label: string;
   unit: string;
   value: number;
@@ -30,7 +30,7 @@ export function Slider({ label, unit, value, setValue, min, max, step, hint }: {
   max: number;
   step: number;
   hint?: string;
-}) {
+}) => {
   return (
     <div className="mb-4">
       <div className="flex items-baseline justify-between mb-1.5">
@@ -46,7 +46,7 @@ export function Slider({ label, unit, value, setValue, min, max, step, hint }: {
       {hint && <div className="text-[10px] text-[color:var(--text-faint)] mt-1 font-mono">{hint}</div>}
     </div>
   );
-}
+});
 
 export function KPI({ label, value, sub, delta, tone }: {
   label: string;

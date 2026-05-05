@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import {
   Area, Bar, BarChart, Brush, CartesianGrid, ComposedChart, Line,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -44,11 +44,11 @@ export function Footer() {
   );
 }
 
-export function MarketOverview({ price, wind, dateRangeLabel }: {
+export const MarketOverview = memo(({ price, wind, dateRangeLabel }: {
   price: number[];
   wind: number[];
   dateRangeLabel: string;
-}) {
+}) => {
   const stats = useMemo(() => {
     const n = price.length;
     const pSum = price.reduce((a,b)=>a+b, 0);
@@ -100,9 +100,9 @@ export function MarketOverview({ price, wind, dateRangeLabel }: {
       </div>
     </div>
   );
-}
+});
 
-export function KPIRow({ result }: { result: OptimizationRunResult }) {
+export const KPIRow = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj, dt } = result;
   const stats = useMemo(() => {
     let totalRev = 0, windOnlyRev = 0;
@@ -179,10 +179,10 @@ export function KPIRow({ result }: { result: OptimizationRunResult }) {
            sub={`${stats.chargeHours.toFixed(0)} h charge · ${stats.dischargeHours.toFixed(0)} h discharge · utilization`} tone="violet"/>
     </div>
   );
-}
+});
 
 // ---- CHART 1: Price + generation overlay ----
-export function ChartsPanel({ result }: { result: OptimizationRunResult }) {
+export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj, dt } = result;
   const maxPts = 800;
   // Plot every trajectory point — values match the operation table row-for-row.
@@ -234,10 +234,10 @@ export function ChartsPanel({ result }: { result: OptimizationRunResult }) {
       </div>
     </div>
   );
-}
+});
 
 // ---- CHART 2: Battery SOC + action ----
-export function DispatchChart({ result }: { result: OptimizationRunResult }) {
+export const DispatchChart = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj, dt } = result;
   // Plot every trajectory point — SOC and dispatch values match the table.
   const data = useMemo(() => plotAll(traj.map(r => ({
@@ -295,10 +295,10 @@ export function DispatchChart({ result }: { result: OptimizationRunResult }) {
       </div>
     </div>
   );
-}
+});
 
 // ---- CHART 2b: Battery action overlaid with price (arbitrage view) ----
-export function BatteryVsPriceChart({ result }: { result: OptimizationRunResult }) {
+export const BatteryVsPriceChart = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj, dt } = result;
   // Plot every trajectory point — each bar / line dot is an exact trajectory
   // value that you can find verbatim in the operation table.
@@ -366,10 +366,10 @@ export function BatteryVsPriceChart({ result }: { result: OptimizationRunResult 
       </div>
     </div>
   );
-}
+});
 
 // ---- CHART 3: Cumulative revenue (with vs without battery) ----
-export function UpliftChart({ result }: { result: OptimizationRunResult }) {
+export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj, dt } = result;
   const cumul = useMemo(() => {
     let cum = 0, cumWind = 0;
@@ -431,10 +431,10 @@ export function UpliftChart({ result }: { result: OptimizationRunResult }) {
       </div>
     </div>
   );
-}
+});
 
 // ---- CHART 4: Action histogram by price bucket ----
-export function ActionHistogram({ result }: { result: OptimizationRunResult }) {
+export const ActionHistogram = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj } = result;
   const bins = useMemo(() => {
     // Bucket prices into N bins, count action direction
@@ -476,10 +476,10 @@ export function ActionHistogram({ result }: { result: OptimizationRunResult }) {
       </div>
     </div>
   );
-}
+});
 
 // ---- CHART 5: Price duration curve ----
-export function PriceDurationCurve({ result }: { result: OptimizationRunResult }) {
+export const PriceDurationCurve = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj } = result;
   const data = useMemo(() => {
     const sorted = [...traj].sort((a, b) => b.price - a.price);
@@ -518,4 +518,4 @@ export function PriceDurationCurve({ result }: { result: OptimizationRunResult }
       </div>
     </div>
   );
-}
+});

@@ -1,7 +1,7 @@
 // ============================================================================
 // DATA INPUT CARD — paste your own price & generation series
 // ============================================================================
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PRICE_DATA, WIND_DATA } from '../data/constants';
 import { parsePaste } from '../formatUtils';
 import type { ChangeEvent, CSSProperties, DragEvent, KeyboardEvent } from 'react';
@@ -236,7 +236,7 @@ export function PowerPlantCombobox({
   );
 }
 
-export function DataInputCard({
+export const DataInputCard = memo(({
   customData, setCustomData, defaultLen,
   onClearBoboInflight,
   powerPlants, plantsLoading, plantsError,
@@ -262,7 +262,7 @@ export function DataInputCard({
   onApplyPlantRange: () => void;
   canApplyPlantRange: boolean;
   boboSeriesError: string | null;
-}) {
+}) => {
   const [tab, setTab] = useState('paste'); // 'paste' | 'upload'
   const [priceText, setPriceText] = useState('');
   const [windText,  setWindText]  = useState('');
@@ -505,4 +505,4 @@ export function DataInputCard({
       </details>
     </div>
   );
-}
+});
