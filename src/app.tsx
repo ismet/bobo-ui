@@ -408,7 +408,9 @@ export default function App() {
 
     // PV clipping reconstruction (if enabled)
     let pvStats: ReconstructStats | undefined;
+    let windPeriodMeasured: number[] | undefined;
     if (snapPvReconstructEnabled) {
+      windPeriodMeasured = finalWind.slice();
       let effectiveLimit = snapClippingLimitMW;
       if (effectiveLimit === null) {
         const detected = detectClippingLimitMW(finalWind);
@@ -470,6 +472,7 @@ export default function App() {
         dateRangeLabel,
         chartEpochUtcMs,
         dt,
+        windPeriodMeasured,
         pvReconstructStats: pvStats,
         horizonTrim,
       };

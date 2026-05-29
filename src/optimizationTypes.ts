@@ -15,6 +15,8 @@ export interface OptimizationRunResult {
   /** UTC midnight of first calendar day in plant date range; omit for bundled/pasted series (uses default chart epoch). */
   chartEpochUtcMs?: number;
   dt: number;
+  /** Measured generation (MW) before PV clipping reconstruction; same length as windPeriod. */
+  windPeriodMeasured?: number[];
   /** Stats from PV clipping reconstruction, present only when reconstruction was applied. */
   pvReconstructStats?: {
     clippedHours: number;

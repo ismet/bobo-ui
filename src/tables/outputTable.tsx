@@ -11,15 +11,44 @@ import type { Trajectory } from '../engine/types';
 //
 //   date · number_of_hours · current_soc_mwh · soc_pct ·
 //   net_power_to_be_sold_or_buy · current_release · battery_grid_power_mw ·
-//   uncontrolled_power · next_soc_mwh · surplus · throughput_mwh · wear_cost ·
+//   uncontrolled_power · generation_measured_mw · generation_reconstructed_mw (PV recon only) ·
+//   next_soc_mwh · surplus · throughput_mwh · wear_cost ·
 //   current_benefit · net_benefit · cumulative_net_benefit · cumulative_benefit ·
 //   wind_only_revenue · uplift_vs_wind_only · price
 // ============================================================================
 type OpRow = Record<string, string | number>;
 
+const BASE_OPERATION_COLS = [
+  'date', 'number_of_hours',
+  'current_soc_mwh', 'soc_pct',
+  'net_power_to_be_sold_or_buy', 'current_release', 'battery_grid_power_mw',
+  'uncontrolled_power',
+  'next_soc_mwh', 'surplus',
+  'throughput_mwh', 'wear_cost',
+  'current_benefit', 'net_benefit',
+  'cumulative_net_benefit', 'cumulative_benefit',
+  'wind_only_revenue', 'uplift_vs_wind_only',
+  'price',
+] as const;
+
+const PV_GENERATION_COLS = [
+  'generation_measured_mw',
+  'generation_reconstructed_mw',
+] as const;
+
+function operationColsFor(result: OptimizationRunResult): string[] {
+  if (!result.windPeriodMeasured) return [...BASE_OPERATION_COLS];
+  const cols = [...BASE_OPERATION_COLS];
+  const idx = cols.indexOf('uncontrolled_power');
+  cols.splice(idx + 1, 0, ...PV_GENERATION_COLS);
+  return cols;
+}
+
 function buildOperationTable(result: OptimizationRunResult): OpRow[] {
-  const { traj, dt, params } = result;
+  const { traj, dt, params, windPeriodMeasured } = result;
   const { capacity, chargeEff, dischargeEff, wearCost = 0 } = params;
+  const showPvGeneration = windPeriodMeasured != null
+    && windPeriodMeasured.length === traj.length;
 
   // dSOC is the energy granularity the DP actually ran with; needed only to
   // recover the battery-side power flow consistently with the optimizer.
@@ -71,12 +100,13 @@ function buildOperationTable(result: OptimizationRunResult): OpRow[] {
     const netBenefit = +(currentBenefit - wearCostEur).toFixed(4);
     cumNetBenefit += netBenefit;
 
-    // Wind-only counterfactual: revenue if wind were sold directly with no battery
+    // Plant generation (MW): uncontrolled_power is what the DP used (reconstructed when PV recon ran).
     const windMw = r.wind ?? 0;
+    const measuredMw = showPvGeneration ? windPeriodMeasured[i]! : undefined;
     const windOnlyRevenue = +((r.windOnlyRevenue ?? windMw * dt * r.price).toFixed(4));
     const upliftVsWindOnly = +(currentBenefit - windOnlyRevenue).toFixed(4);
 
-    rows.push({
+    const row: OpRow = {
       date: i,
       number_of_hours: +(i * dt).toFixed(4),
       current_soc_mwh: currentSocMwh,
@@ -96,22 +126,15 @@ function buildOperationTable(result: OptimizationRunResult): OpRow[] {
       wind_only_revenue: windOnlyRevenue,
       uplift_vs_wind_only: upliftVsWindOnly,
       price: r.price,
-    });
+    };
+    if (showPvGeneration) {
+      row.generation_measured_mw = +measuredMw!.toFixed(4);
+      row.generation_reconstructed_mw = +windMw.toFixed(4);
+    }
+    rows.push(row);
   }
   return rows;
 }
-
-const OPERATION_COLS = [
-  'date', 'number_of_hours',
-  'current_soc_mwh', 'soc_pct',
-  'net_power_to_be_sold_or_buy', 'current_release', 'battery_grid_power_mw',
-  'uncontrolled_power', 'next_soc_mwh', 'surplus',
-  'throughput_mwh', 'wear_cost',
-  'current_benefit', 'net_benefit',
-  'cumulative_net_benefit', 'cumulative_benefit',
-  'wind_only_revenue', 'uplift_vs_wind_only',
-  'price'
-];
 
 function rowsToCSV(rows: OpRow[], cols: string[]): string {
   const lines = [cols.join(',')];
@@ -157,6 +180,7 @@ const pageBtnStyle = (disabled: boolean) => ({
 });
 
 export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) => {
+  const operationCols = useMemo(() => operationColsFor(result), [result]);
   const rows = useMemo(() => buildOperationTable(result), [result]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
@@ -166,14 +190,14 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
   const visible = rows.slice(page * pageSize, (page + 1) * pageSize);
 
   const handleDownload = () => {
-    const csv = rowsToCSV(rows, OPERATION_COLS);
+    const csv = rowsToCSV(rows, operationCols);
     downloadCSV(`res_operation_table_${rows.length}rows.csv`, csv);
   };
 
   const handleCopyAll = async () => {
     const tsv = [
-      OPERATION_COLS.join('\t'),
-      ...rows.map(r => OPERATION_COLS.map(c => r[c]).join('\t'))
+      operationCols.join('\t'),
+      ...rows.map(r => operationCols.map(c => r[c]).join('\t'))
     ].join('\n');
     try {
       await navigator.clipboard.writeText(tsv);
@@ -210,6 +234,7 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
   const gridLimitMw = result.traj?._gridLimit ?? Math.max(p.chargeMax ?? 0, p.dischargeMax ?? 0);
   const curtailedHours  = result.traj?._curtailedHours  ?? 0;
   const curtailedEnergy = result.traj?._curtailedEnergy ?? 0;
+  const pvRecon = result.pvReconstructStats;
   const designChips = [
     { k: 'Capacity',            v: `${p.capacity ?? '?'} MWh` },
     { k: 'Max charge',          v: `${p.chargeMax ?? '?'} MW` },
@@ -272,6 +297,19 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
             </div>
           ))}
         </div>
+        {pvRecon && (
+          <div className="mt-2 text-[10px] font-mono" style={{
+            color: 'var(--accent-teal)', lineHeight: 1.5
+          }}>
+            PV clipping reconstruction applied
+            &nbsp;· {pvRecon.clippedHours.toLocaleString()} hour{pvRecon.clippedHours === 1 ? '' : 's'} adjusted
+            &nbsp;· {pvRecon.recoveredEnergyMWh.toFixed(1)} MWh recovered vs measured
+            &nbsp;<span style={{ color: 'var(--text-faint)' }}>
+              (generation_measured_mw = clipped input;
+              generation_reconstructed_mw and uncontrolled_power = reconstructed estimate used in dispatch.)
+            </span>
+          </div>
+        )}
         {curtailedHours > 0 && (
           <div className="mt-2 text-[10px] font-mono" style={{
             color: 'var(--accent-amber)', lineHeight: 1.5
@@ -305,7 +343,7 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
           <thead style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>
             <tr>
               <th style={thStyle}>#</th>
-              {OPERATION_COLS.map(c => (
+              {operationCols.map(c => (
                 <th key={c} style={thStyle}>{c}</th>
               ))}
             </tr>
@@ -315,10 +353,12 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
               <tr key={page * pageSize + idx}
                   style={{ background: idx % 2 ? 'var(--surface)' : 'transparent' }}>
                 <td style={{...tdStyle, color: 'var(--text-faint)'}}>{page * pageSize + idx + 1}</td>
-                {OPERATION_COLS.map(c => {
+                {operationCols.map(c => {
                   const v = row[c]!;
                   const n = typeof v === 'number' ? v : NaN;
                   let color = 'var(--text)';
+                  if (c === 'generation_reconstructed_mw' && n !== 0) color = 'var(--accent-teal)';
+                  else if (c === 'generation_measured_mw' && n !== 0) color = 'var(--text-dim)';
                   if (c === 'cumulative_benefit' || c === 'cumulative_net_benefit')
                     color = 'var(--accent-teal)';
                   else if ((c === 'current_release' || c === 'battery_grid_power_mw') && n > 0)
