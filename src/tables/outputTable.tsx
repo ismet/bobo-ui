@@ -7,7 +7,7 @@ import type { Trajectory } from '../engine/types';
 // OUTPUT TABLE — operation table with physical quantities tied to system design
 // Columns reflect the parameters defined in the System Design panel:
 //   capacity (MWh), chargeMax/dischargeMax (MW), chargeEff/dischargeEff (frac),
-//   dt (h), wearCost (€/MWh), initialSOC (frac), chargeFromGrid, windScale.
+//   dt (h), wearCost (€/MWh), initialSOC (frac), chargeFromGrid.
 //
 //   date · number_of_hours · current_soc_mwh · soc_pct ·
 //   net_power_to_be_sold_or_buy · current_release · battery_grid_power_mw ·
@@ -72,7 +72,8 @@ function buildOperationTable(result: OptimizationRunResult): OpRow[] {
     cumNetBenefit += netBenefit;
 
     // Wind-only counterfactual: revenue if wind were sold directly with no battery
-    const windOnlyRevenue = +((r.windOnlyRevenue ?? r.wind * dt * r.price).toFixed(4));
+    const windMw = r.wind ?? 0;
+    const windOnlyRevenue = +((r.windOnlyRevenue ?? windMw * dt * r.price).toFixed(4));
     const upliftVsWindOnly = +(currentBenefit - windOnlyRevenue).toFixed(4);
 
     rows.push({
@@ -83,7 +84,7 @@ function buildOperationTable(result: OptimizationRunResult): OpRow[] {
       net_power_to_be_sold_or_buy: netPower,
       current_release: currentRelease,
       battery_grid_power_mw: batteryGridPowerMw,
-      uncontrolled_power: +r.wind.toFixed(4),
+      uncontrolled_power: +windMw.toFixed(4),
       next_soc_mwh: nextSocMwh,
       surplus: surplusMw,
       throughput_mwh: throughputMwh,

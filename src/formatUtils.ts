@@ -113,6 +113,36 @@ export function boboDefaultDateRange(): { startDate: string; endDate: string } {
   return { startDate: formatLocalYMD(start), endDate: formatLocalYMD(end) };
 }
 
+export type HorizonTrimInfo = {
+  originalHours: number;
+  usedHours: number;
+  droppedHours: number;
+};
+
+/**
+ * Trim price and wind to the same length. When fullDaysOnly, drop trailing
+ * partial-day hours so both arrays are a multiple of 24 (needed for PV recon).
+ */
+export function alignPriceWindSeries(
+  price: number[],
+  wind: number[],
+  opts?: { fullDaysOnly?: boolean },
+): { price: number[]; wind: number[]; droppedHours: number; trim?: HorizonTrimInfo } {
+  const originalHours = Math.min(price.length, wind.length);
+  let usedHours = originalHours;
+  if (opts?.fullDaysOnly) usedHours = Math.floor(usedHours / 24) * 24;
+  const droppedHours = originalHours - usedHours;
+  const trim = droppedHours > 0
+    ? { originalHours, usedHours, droppedHours }
+    : undefined;
+  return {
+    price: price.slice(0, usedHours),
+    wind: wind.slice(0, usedHours),
+    droppedHours,
+    trim,
+  };
+}
+
 export function normalizePowerPlantsPayload(j: unknown): unknown[] {
   if (Array.isArray(j)) return j;
   if (j && typeof j === 'object') {

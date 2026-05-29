@@ -3,7 +3,8 @@
 // ============================================================================
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PRICE_DATA, WIND_DATA } from '../data/constants';
-import { parsePaste } from '../formatUtils';
+import { parsePaste, type HorizonTrimInfo } from '../formatUtils';
+import { Slider } from '../uiPrimitives';
 import type { ChangeEvent, CSSProperties, DragEvent, KeyboardEvent } from 'react';
 
 export type FlashMsg = { tone: 'error' | 'info'; text: string };
@@ -249,7 +250,14 @@ export const DataInputCard = memo(({
   seriesLoading, selectedPlantId, onPickPlant,
   boboStartDate, boboEndDate, onBoboStartDateChange, onBoboEndDateChange,
   onApplyPlantRange, canApplyPlantRange,
-  boboSeriesError
+  boboSeriesError,
+  pvReconstructEnabled, setPvReconstructEnabled,
+  clippingLimitMW, setClippingLimitMW,
+  pvDayThr, setPvDayThr,
+  pvWideGap, setPvWideGap,
+  pvPeakFactor, setPvPeakFactor,
+  pvReconstructStats,
+  horizonTrim,
 }: {
   customData: { price: number[]; wind: number[] } | null;
   setCustomData: (data: { price: number[]; wind: number[] } | null, fromBobo?: boolean) => void;
@@ -268,11 +276,34 @@ export const DataInputCard = memo(({
   onApplyPlantRange: () => void;
   canApplyPlantRange: boolean;
   boboSeriesError: string | null;
+  pvReconstructEnabled: boolean;
+  setPvReconstructEnabled: (v: boolean) => void;
+  clippingLimitMW: number | null;
+  setClippingLimitMW: (v: number | null) => void;
+  pvDayThr: number;
+  setPvDayThr: (v: number) => void;
+  pvWideGap: number;
+  setPvWideGap: (v: number) => void;
+  pvPeakFactor: number;
+  setPvPeakFactor: (v: number) => void;
+  pvReconstructStats: { clippedHours: number; recoveredEnergyMWh: number } | null;
+  horizonTrim: HorizonTrimInfo | null;
 }) => {
   const [tab, setTab] = useState('paste'); // 'paste' | 'upload'
   const [priceText, setPriceText] = useState('');
   const [windText,  setWindText]  = useState('');
   const [message,   setMessage]   = useState<FlashMsg | null>(null);
+
+  const draftHorizonTrim = useMemo((): HorizonTrimInfo | null => {
+    if (!pvReconstructEnabled) return null;
+    const n = customData ? Math.min(customData.price.length, customData.wind.length) : defaultLen;
+    const usedHours = Math.floor(n / 24) * 24;
+    const droppedHours = n - usedHours;
+    if (droppedHours <= 0) return null;
+    return { originalHours: n, usedHours, droppedHours };
+  }, [pvReconstructEnabled, customData, defaultLen]);
+
+  const trimNotice = horizonTrim ?? draftHorizonTrim;
 
   const handleLoad = () => {
     onClearBoboInflight?.();
@@ -514,6 +545,82 @@ export const DataInputCard = memo(({
           </div>
         )}
       </details>
+
+      {/* ── PV clipping reconstruction ── */}
+      <div className="hairline my-4" />
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-2">
+          PV clipping reconstruction
+        </div>
+        <div className="grid grid-cols-2 gap-1 mb-3">
+          <button onClick={() => setPvReconstructEnabled(true)}
+            className={`py-2 text-xs font-mono border transition-colors ${pvReconstructEnabled
+              ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
+              : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
+            }`}>PV mode ON</button>
+          <button onClick={() => setPvReconstructEnabled(false)}
+            className={`py-2 text-xs font-mono border transition-colors ${!pvReconstructEnabled
+              ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
+              : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
+            }`}>PV mode OFF</button>
+        </div>
+
+        {pvReconstructEnabled && trimNotice && (
+          <div className="mb-3 text-[10px] font-mono text-[color:var(--accent-amber)] leading-relaxed">
+            Horizon shortened to {trimNotice.usedHours.toLocaleString()} h
+            ({Math.floor(trimNotice.usedHours / 24)} full days) for PV reconstruction;
+            last {trimNotice.droppedHours.toLocaleString()} h of{' '}
+            {trimNotice.originalHours.toLocaleString()} h omitted
+            {horizonTrim ? ' (applied at last optimize)' : ' (will apply on optimize)'}.
+          </div>
+        )}
+
+        {pvReconstructEnabled && (
+          <>
+            <Slider label="Inverter clipping limit" unit="MW"
+              min={0.01} max={50} step={0.01}
+              value={clippingLimitMW ?? Math.max(...(customData?.wind ?? WIND_DATA))}
+              setValue={setClippingLimitMW}
+              hint={clippingLimitMW === null
+                ? 'No clipping plateau detected — data appears unclipped'
+                : 'Auto-detected from data; adjust if needed'} />
+
+            <details className="mt-1">
+              <summary className="text-[10px] font-mono text-[color:var(--text-dim)] py-1 cursor-pointer"
+                       style={{ userSelect: 'none' }}>
+                <span style={{ color: 'var(--accent-teal)' }}>▸</span> advanced settings
+              </summary>
+              <div className="mt-2">
+                <Slider label="Daytime threshold" unit="MW" min={0.01} max={1} step={0.01}
+                  value={pvDayThr} setValue={setPvDayThr}
+                  hint="Values below this (nighttime) are not used as fitting anchors" />
+                <Slider label="Wide gap threshold" unit="hrs" min={1} max={12} step={1}
+                  value={pvWideGap} setValue={setPvWideGap}
+                  hint="Consecutive clipped hours triggering peak scaling" />
+                <Slider label="Peak factor" unit="×" min={1} max={3} step={0.05}
+                  value={pvPeakFactor} setValue={setPvPeakFactor}
+                  hint="Reconstructed peak ≥ this × inverter limit on wide-gap days" />
+              </div>
+            </details>
+
+            {/* Warning when data doesn't look like clipped PV */}
+            {pvReconstructStats && horizonTrim && pvReconstructStats.clippedHours / horizonTrim.usedHours > 0.5 && (
+              <div className="mt-2 text-[10px] font-mono text-[color:var(--accent-amber)] leading-relaxed">
+                ⚠ Most hours detected as clipped ({pvReconstructStats.clippedHours.toLocaleString()} of {(customData?.price.length ?? 0).toLocaleString()}).<br/>
+                Generation data may not be PV with clipping at this limit.
+              </div>
+            )}
+
+            {/* Reconstruction stats after optimize */}
+            {pvReconstructStats && (
+              <div className="mt-2 text-[10px] font-mono text-[color:var(--accent-green)] leading-relaxed">
+                ✓ Reconstructed {pvReconstructStats.clippedHours.toLocaleString()} clipped hours<br/>
+                · Recovered {pvReconstructStats.recoveredEnergyMWh.toFixed(1)} MWh of energy
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 });

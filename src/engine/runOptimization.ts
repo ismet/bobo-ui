@@ -9,6 +9,9 @@ export function runOptimization(
   params: OptimizationParams
 ): Trajectory {
   const T = price.length;
+  if (wind.length !== T) {
+    throw new Error(`price/wind length mismatch: ${T} prices vs ${wind.length} generation values`);
+  }
   const {
     capacity, chargeMax, dischargeMax,
     chargeEff, dischargeEff, initialSOCFrac, socSteps: socStepsHint, dt,

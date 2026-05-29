@@ -18,15 +18,19 @@ import {
 import { DataInputCard, type PowerPlantRow } from './panels/dataInputPanels';
 import { DegradationCard, EconomicsCard } from './panels/economicsDegradation';
 import { OutputTable } from './tables/outputTable';
+import { boboApiUrl } from './data/api';
 import { PRICE_DATA, WIND_DATA } from './data/constants';
 import {
   boboDefaultDateRange,
   formatLocalYMD,
+  alignPriceWindSeries,
   fingerprintSeriesSample,
   normalizePowerPlantsPayload,
   ymdToUtcMidnightMs,
 } from './formatUtils';
 import { runOptimizationDelegated } from './engine/optimizationRunner';
+import { reconstructGeneration, detectClippingLimitMW } from './engine/reconstructGeneration';
+import type { ReconstructStats } from './engine/reconstructGeneration';
 import type { OptimizationParams } from './engine/types';
 import type { OptimizationRunResult } from './optimizationTypes';
 import { FullScreenJobOverlay } from './fullScreenJobOverlay';
@@ -39,7 +43,6 @@ export default function App() {
   const [dischargeMax, setDischargeMax] = useState(11);   // MW (draft)
   const [chargeEff, setChargeEff] = useState(0.93); // frac (draft)
   const [dischargeEff, setDischargeEff] = useState(0.95); // frac (draft)
-  const [windScale, setWindScale] = useState(1.0); // (draft)
   const [initialSOC, setInitialSOC] = useState(0.5); // (draft)
   // Wind/solar installed capacity (MW) — sets the hard grid export ceiling.
   // null = use max(chargeMax, dischargeMax) as before.
@@ -69,6 +72,14 @@ export default function App() {
   //   buildFadeCurve. With the defaults (2.5%/0.7%/20y, τ=4y) EoL ≈ 78%.
   const [yearOneFadePct, setYearOneFadePct] = useState(1.0);    // % year 1 (draft)
   const [longTermFadePct, setLongTermFadePct] = useState(1.0);  // % long term (draft)
+  // ---------------------------------------------------------------------------
+
+  // ---- PV clipping reconstruction -------------------------------------------
+  const [pvReconstructEnabled, setPvReconstructEnabled] = useState(false);   // (draft)
+  const [clippingLimitMW, setClippingLimitMW] = useState<number | null>(null); // (draft) null = not yet detected
+  const [pvDayThr, setPvDayThr] = useState(0.05);                             // (draft)
+  const [pvWideGap, setPvWideGap] = useState(4);                              // (draft)
+  const [pvPeakFactor, setPvPeakFactor] = useState(1.25);                     // (draft)
   // ---------------------------------------------------------------------------
 
   // ---- Financial parameters --------------------------------------------------
@@ -160,7 +171,6 @@ export default function App() {
       dischargeMax,
       chargeEff,
       dischargeEff,
-      windScale,
       initialSOC,
       installedCapacityMW ?? '',
       targetDsoc ?? 'auto',
@@ -171,6 +181,11 @@ export default function App() {
       lifetimeYears,
       yearOneFadePct,
       longTermFadePct,
+      pvReconstructEnabled ? 1 : 0,
+      clippingLimitMW ?? 'auto',
+      pvDayThr,
+      pvWideGap,
+      pvPeakFactor,
     ].join('|');
   }, [
     customData,
@@ -183,7 +198,6 @@ export default function App() {
     dischargeMax,
     chargeEff,
     dischargeEff,
-    windScale,
     initialSOC,
     installedCapacityMW,
     targetDsoc,
@@ -194,6 +208,11 @@ export default function App() {
     lifetimeYears,
     yearOneFadePct,
     longTermFadePct,
+    pvReconstructEnabled,
+    clippingLimitMW,
+    pvDayThr,
+    pvWideGap,
+    pvPeakFactor,
   ]);
 
   const hasPendingChanges = appliedScenarioKey == null || appliedScenarioKey !== draftScenarioKey;
@@ -252,7 +271,7 @@ export default function App() {
       setPlantsLoading(true);
       setPlantsError(null);
       try {
-        const r = await fetch('https://bobo-api.onrender.com/power-plants');
+        const r = await fetch(boboApiUrl('/power-plants'));
         if (!r.ok) throw new Error(`power-plants ${r.status}`);
         const j = await r.json();
         const list = normalizePowerPlantsPayload(j);
@@ -275,6 +294,17 @@ export default function App() {
 
   useEffect(() => () => { seriesAbortRef.current?.abort(); }, []);
 
+  // Auto-detect clipping limit when data changes or PV mode toggled ON
+  const currentWindForDetect = customData ? customData.wind : WIND_DATA;
+  useEffect(() => {
+    if (pvReconstructEnabled) {
+      const detected = detectClippingLimitMW(currentWindForDetect);
+      setClippingLimitMW(detected);
+    } else {
+      setClippingLimitMW(null);
+    }
+  }, [pvReconstructEnabled, customData]);
+
   const fetchPlantSeries = useCallback(async (id: string | number, startDate: string, endDate: string): Promise<SeriesData | null> => {
     const gen = ++seriesFetchGenRef.current;
     seriesAbortRef.current?.abort();
@@ -282,9 +312,11 @@ export default function App() {
     seriesAbortRef.current = ac;
     setSeriesLoading(true);
     setBoboSeriesError(null);
-    const url = 'https://bobo-api.onrender.com/power-plants/' + encodeURIComponent(id)
+    const url = boboApiUrl(
+      '/power-plants/' + encodeURIComponent(id)
       + '/prices-and-generation?start_date=' + encodeURIComponent(startDate)
-      + '&end_date=' + encodeURIComponent(endDate);
+      + '&end_date=' + encodeURIComponent(endDate),
+    );
     try {
       const r = await fetch(url, { signal: ac.signal });
       if (!r.ok) throw new Error('prices-and-generation ' + r.status);
@@ -343,7 +375,6 @@ export default function App() {
     const snapDischargeMax = dischargeMax;
     const snapChargeEff = chargeEff;
     const snapDischargeEff = dischargeEff;
-    const snapWindScale = windScale;
     const snapInitialSOC = initialSOC;
     const snapInstalledCapacityMW = installedCapacityMW;
     const snapTargetDsoc = targetDsoc;
@@ -356,12 +387,44 @@ export default function App() {
     const snapYearOneFadePct = yearOneFadePct;
     const snapLongTermFadePct = longTermFadePct;
 
+    const snapPvReconstructEnabled = pvReconstructEnabled;
+    const snapClippingLimitMW = clippingLimitMW;
+    const snapPvDayThr = pvDayThr;
+    const snapPvWideGap = pvWideGap;
+    const snapPvPeakFactor = pvPeakFactor;
+
     const snapKey = draftScenarioKey;
 
     const snapPrice = snapCustomData ? snapCustomData.price : PRICE_DATA;
     const snapWind = snapCustomData ? snapCustomData.wind : WIND_DATA;
-    const pricePeriod = snapPrice.slice(0, snapPrice.length);
-    const windPeriod = snapWind.slice(0, snapWind.length).map(w => w * snapWindScale);
+    const aligned = alignPriceWindSeries(
+      snapPrice,
+      snapWind,
+      { fullDaysOnly: snapPvReconstructEnabled },
+    );
+    let pricePeriod = aligned.price;
+    let finalWind = aligned.wind;
+    const horizonTrim = aligned.trim;
+
+    // PV clipping reconstruction (if enabled)
+    let pvStats: ReconstructStats | undefined;
+    if (snapPvReconstructEnabled) {
+      let effectiveLimit = snapClippingLimitMW;
+      if (effectiveLimit === null) {
+        const detected = detectClippingLimitMW(finalWind);
+        effectiveLimit = detected ?? Math.max(...finalWind);
+        setClippingLimitMW(effectiveLimit);
+      }
+      const result = reconstructGeneration(finalWind, effectiveLimit, {
+        dayThr: snapPvDayThr,
+        wideGap: snapPvWideGap,
+        peakFactor: snapPvPeakFactor,
+      });
+      finalWind = result.cleaned;
+      pvStats = result.stats;
+      setClippingLimitMW(effectiveLimit);
+    }
+    const windPeriod = finalWind;
     const dateRangeLabel = snapSelectedPlantId ? `${snapBoboStartDate} -> ${snapBoboEndDate}` : 'Loaded dataset';
 
     setRunning(true); setErr(null);
@@ -407,6 +470,8 @@ export default function App() {
         dateRangeLabel,
         chartEpochUtcMs,
         dt,
+        pvReconstructStats: pvStats,
+        horizonTrim,
       };
       setAppliedScenarioKey(snapKey);
       setAppliedBatteryCostPerKWh(snapBatteryCostPerKWh);
@@ -436,7 +501,6 @@ export default function App() {
     dischargeMax,
     chargeEff,
     dischargeEff,
-    windScale,
     initialSOC,
     installedCapacityMW,
     targetDsoc,
@@ -447,6 +511,11 @@ export default function App() {
     lifetimeYears,
     yearOneFadePct,
     longTermFadePct,
+    pvReconstructEnabled,
+    clippingLimitMW,
+    pvDayThr,
+    pvWideGap,
+    pvPeakFactor,
     draftScenarioKey,
   ]);
 
@@ -549,9 +618,6 @@ export default function App() {
                   <Slider label="Installed capacity (wind/solar)" unit="MW" min={1} max={200} step={1}
                     value={installedCapacityMW} setValue={setInstalledCapacityMW}
                     hint={`grid export ceiling · sweep uses this as fixed limit`} />
-                  <Slider label="Plant output scaling" unit="×" min={0.25} max={3} step={0.05}
-                    value={windScale} setValue={setWindScale}
-                    hint={`peak generation ≈ ${(23 * windScale).toFixed(1)} MW (default dataset)`} />
                   <Slider label="Starting charge level" unit="" min={0} max={1} step={0.05}
                     value={initialSOC} setValue={setInitialSOC}
                     hint={`≈ ${(initialSOC * capacity).toFixed(1)} MWh stored`} />
@@ -655,6 +721,18 @@ export default function App() {
                 onApplyPlantRange={handleApplyPlantRange}
                 canApplyPlantRange={hasUnappliedChanges}
                 boboSeriesError={boboSeriesError}
+                pvReconstructEnabled={pvReconstructEnabled}
+                setPvReconstructEnabled={setPvReconstructEnabled}
+                clippingLimitMW={clippingLimitMW}
+                setClippingLimitMW={setClippingLimitMW}
+                pvDayThr={pvDayThr}
+                setPvDayThr={setPvDayThr}
+                pvWideGap={pvWideGap}
+                setPvWideGap={setPvWideGap}
+                pvPeakFactor={pvPeakFactor}
+                setPvPeakFactor={setPvPeakFactor}
+                pvReconstructStats={appliedResult?.pvReconstructStats ?? null}
+                horizonTrim={appliedResult?.horizonTrim ?? null}
               />
               <EconomicsCard
                 batteryCostPerKWh={batteryCostPerKWh}
