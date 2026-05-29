@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { setLoggedIn, validateLogin } from './auth';
+import { isAuthConfigured, setLoggedIn, validateLogin } from './auth';
 
 export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState('');
@@ -7,12 +7,16 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!isAuthConfigured()) {
+      setError('Sign-in is not configured. Set VITE_AUTH_USERS in the environment and redeploy.');
+      return;
+    }
     setSubmitting(true);
     try {
-      const ok = await validateLogin(username, password);
+      const ok = validateLogin(username, password);
       if (!ok) {
         setError('Invalid username or password');
         return;
@@ -20,7 +24,7 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
       setLoggedIn();
       onSuccess();
     } catch {
-      setError('Sign-in is unavailable. Ensure users.json is deployed (copy from users.example.json).');
+      setError('Sign-in is not configured. Set VITE_AUTH_USERS in the environment and redeploy.');
     } finally {
       setSubmitting(false);
     }
@@ -43,7 +47,7 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
           </div>
         </div>
 
-        <form onSubmit={(e) => { void handleSubmit(e); }}>
+        <form onSubmit={handleSubmit}>
           <label className="login-field">
             <span className="login-field-label">Username</span>
             <input

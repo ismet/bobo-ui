@@ -2,7 +2,10 @@ services:
   - type: web
     name: bobo-ui
     runtime: static
-    buildCommand: npm ci && test -f public/users.json || cp public/users.example.json public/users.json && npm run build
+    buildCommand: npm ci && npm run build
+    envVars:
+      - key: VITE_AUTH_USERS
+        sync: false
     staticPublishPath: ./dist
     # Avoid CDN serving stale index.html that references removed hashed bundles (404 → text/plain MIME).
     headers:

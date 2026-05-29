@@ -10,6 +10,40 @@ export interface AuthUser {
 
 let lastActivityWriteMs = 0;
 
+function parseAuthUsersFromEnv(): AuthUser[] {
+  const raw = import.meta.env.VITE_AUTH_USERS;
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+
+  try {
+    const data: unknown = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    const users: AuthUser[] = [];
+    for (const row of data) {
+      if (
+        row &&
+        typeof row === 'object' &&
+        typeof (row as AuthUser).username === 'string' &&
+        typeof (row as AuthUser).password === 'string'
+      ) {
+        users.push({
+          username: (row as AuthUser).username,
+          password: (row as AuthUser).password,
+        });
+      }
+    }
+    return users;
+  } catch {
+    return [];
+  }
+}
+
+/** Parsed once at module load from `VITE_AUTH_USERS` (build-time env). */
+const configuredUsers: AuthUser[] = parseAuthUsersFromEnv();
+
+export function isAuthConfigured(): boolean {
+  return configuredUsers.length > 0;
+}
+
 export function touchActivity(): void {
   const now = Date.now();
   if (now - lastActivityWriteMs < 1000) return;
@@ -62,20 +96,10 @@ export function clearSession(): void {
   localStorage.removeItem(AUTH_ACTIVITY_KEY);
 }
 
-export async function loadUsers(): Promise<AuthUser[]> {
-  const res = await fetch('/users.json', { cache: 'no-store' });
-  if (!res.ok) {
-    throw new Error(`Could not load user list (${res.status})`);
+export function validateLogin(username: string, password: string): boolean {
+  if (!isAuthConfigured()) {
+    throw new Error('Auth not configured');
   }
-  const data: unknown = await res.json();
-  if (!Array.isArray(data)) {
-    throw new Error('Invalid user list format');
-  }
-  return data as AuthUser[];
-}
-
-export async function validateLogin(username: string, password: string): Promise<boolean> {
-  const users = await loadUsers();
   const u = username.trim();
-  return users.some((row) => row.username === u && row.password === password);
+  return configuredUsers.some((row) => row.username === u && row.password === password);
 }
