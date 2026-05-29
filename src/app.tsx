@@ -38,7 +38,7 @@ import type { OptimizationRunResult } from './optimizationTypes';
 import { FullScreenJobOverlay } from './fullScreenJobOverlay';
 import { SectionHeader, Slider } from './uiPrimitives';
 
-export default function App() {
+export default function App({ onLogout }: { onLogout?: () => void }) {
   // Parameters (capacity / power limits auto-synced from input data peak — see useEffect below)
   const [capacity, setCapacity] = useState(() => peakGenerationMW(WIND_DATA));   // MWh (draft)
   const [chargeMax, setChargeMax] = useState(() => peakGenerationMW(WIND_DATA));    // MW (draft)
@@ -567,7 +567,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <Header />
+      <Header onLogout={onLogout} />
       <main className="w-full px-6 pb-24">
         {/* Hero */}
         <section className="pt-10 pb-8 grid-bg border-b border-[color:var(--border)] -mx-6 px-6 mb-10">

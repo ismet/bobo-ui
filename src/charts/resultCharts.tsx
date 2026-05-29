@@ -8,7 +8,7 @@ import { LegendChip, useIsolation, useZoom, ZoomBadge } from './chartInteraction
 import { KPI, Tip } from '../uiPrimitives';
 import type { OptimizationRunResult } from '../optimizationTypes';
 
-export function Header() {
+export function Header({ onLogout }: { onLogout?: () => void }) {
   return (
     <header className="border-b border-[color:var(--border)]">
       <div className="w-full px-6 py-4 flex flex-wrap items-center justify-between gap-y-3 gap-x-4">
@@ -40,6 +40,15 @@ export function Header() {
           </span>
           <span className="hidden sm:inline chip">PTF / plant series</span>
           <span className="hidden md:inline text-[color:var(--text-faint)]">default: 8,784 h · 2024</span>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="chip border-[color:var(--border)] hover:border-[color:var(--border-strong)] hover:text-[color:var(--text)] transition-colors"
+            >
+              Log out
+            </button>
+          )}
         </div>
       </div>
     </header>
