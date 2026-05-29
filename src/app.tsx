@@ -27,6 +27,7 @@ import {
   alignPriceWindSeries,
   fingerprintSeriesSample,
   normalizePowerPlantsPayload,
+  peakGenerationMW,
   ymdToUtcMidnightMs,
 } from './formatUtils';
 import { runOptimizationDelegated } from './engine/optimizationRunner';
@@ -38,28 +39,27 @@ import { FullScreenJobOverlay } from './fullScreenJobOverlay';
 import { SectionHeader, Slider } from './uiPrimitives';
 
 export default function App() {
-  // Parameters
-  const [capacity, setCapacity] = useState(11);   // MWh (draft)
-  const [chargeMax, setChargeMax] = useState(6);    // MW (draft)
-  const [dischargeMax, setDischargeMax] = useState(11);   // MW (draft)
+  // Parameters (capacity / power limits auto-synced from input data peak — see useEffect below)
+  const [capacity, setCapacity] = useState(() => peakGenerationMW(WIND_DATA));   // MWh (draft)
+  const [chargeMax, setChargeMax] = useState(() => peakGenerationMW(WIND_DATA));    // MW (draft)
+  const [dischargeMax, setDischargeMax] = useState(() => peakGenerationMW(WIND_DATA));   // MW (draft)
   const [chargeEff, setChargeEff] = useState(0.93); // frac (draft)
   const [dischargeEff, setDischargeEff] = useState(0.95); // frac (draft)
   const [initialSOC, setInitialSOC] = useState(0.5); // (draft)
   // Wind/solar installed capacity (MW) — sets the hard grid export ceiling.
   // null = use max(chargeMax, dischargeMax) as before.
-  const [installedCapacityMW, setInstalledCapacityMW] = useState<number>(23); // (draft)
+  const [installedCapacityMW, setInstalledCapacityMW] = useState(() => peakGenerationMW(WIND_DATA)); // (draft)
   const [systemDesignOpen, setSystemDesignOpen] = useState(true);
 
   // Time step in hours (fixed): each row in data = 1 hour.
   const dt = 1.0;
 
   // Solution grid resolution (max MWh per SOC step). null = auto.
-  // Finer grids give more precise dispatch but are slower. Default 1 MWh.
-  const [targetDsoc, setTargetDsoc] = useState<number | null>(1.0); // (draft)
+  const [targetDsoc, setTargetDsoc] = useState<number | null>(0.25); // (draft)
 
   // Whether the battery may import energy from the grid to charge.
   // false = on-site generation only for charging (no grid imports).
-  const [chargeFromGrid, setChargeFromGrid] = useState(true); // (draft)
+  const [chargeFromGrid, setChargeFromGrid] = useState(false); // (draft) — default: plant only
 
   // ---- Degradation parameters -----------------------------------------------
   // OPTION A: per-MWh wear cost charged against battery throughput in the DP.
@@ -295,16 +295,26 @@ export default function App() {
 
   useEffect(() => () => { seriesAbortRef.current?.abort(); }, []);
 
-  // Auto-detect clipping limit when data changes or PV mode toggled ON
-  const currentWindForDetect = customData ? customData.wind : WIND_DATA;
+  const handlePvReconstructEnabled = useCallback((enabled: boolean) => {
+    setPvReconstructEnabled(enabled);
+    if (!enabled) setClippingLimitMW(null);
+    setHasUnappliedChanges(true);
+  }, []);
+
+  const inputWindForSizing = customData ? customData.wind : WIND_DATA;
+  const inputSeriesSizingKey = useMemo(() => {
+    const price = customData ? customData.price : PRICE_DATA;
+    return `${inputWindForSizing.length}:${fingerprintSeriesSample(price, inputWindForSizing)}`;
+  }, [customData, inputWindForSizing]);
+
   useEffect(() => {
-    if (pvReconstructEnabled) {
-      const detected = detectClippingLimitMW(currentWindForDetect);
-      setClippingLimitMW(detected);
-    } else {
-      setClippingLimitMW(null);
-    }
-  }, [pvReconstructEnabled, customData]);
+    const peak = peakGenerationMW(inputWindForSizing);
+    setCapacity(peak);
+    setChargeMax(peak);
+    setDischargeMax(peak);
+    setInstalledCapacityMW(peak);
+    setHasUnappliedChanges(true);
+  }, [inputSeriesSizingKey, inputWindForSizing]);
 
   const fetchPlantSeries = useCallback(async (id: string | number, startDate: string, endDate: string): Promise<SeriesData | null> => {
     const gen = ++seriesFetchGenRef.current;
@@ -358,6 +368,9 @@ export default function App() {
   // Draft data source (for labels/hints only)
   const draftActivePrice = useMemo(() => customData ? customData.price : PRICE_DATA, [customData]);
   const draftActiveWind = useMemo(() => customData ? customData.wind : WIND_DATA, [customData]);
+  const draftPeakMW = useMemo(() => peakGenerationMW(draftActiveWind), [draftActiveWind]);
+  const powerSliderMax = Math.max(100, Math.ceil(draftPeakMW * 1.25));
+  const installedSliderMax = Math.max(200, Math.ceil(draftPeakMW * 1.25));
   const availableHours = draftActivePrice.length * dt;          // total hours covered by dataset
   const availableSteps = draftActivePrice.length;               // raw point count
   const horizonHours = availableHours;
@@ -601,13 +614,15 @@ export default function App() {
               />
               <div className="card p-5">
                 <div>
-                  <Slider label="Battery capacity" unit="MWh" min={1} max={100} step={1}
+                  <Slider label="Battery capacity" unit="MWh" min={1} max={powerSliderMax} step={1}
                     value={capacity} setValue={setCapacity}
-                    hint="energy stored when fully charged" />
-                  <Slider label="Max charge power" unit="MW" min={1} max={100} step={1}
-                    value={chargeMax} setValue={setChargeMax} />
-                  <Slider label="Max discharge power" unit="MW" min={1} max={100} step={1}
-                    value={dischargeMax} setValue={setDischargeMax} />
+                    hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
+                  <Slider label="Max charge power" unit="MW" min={1} max={powerSliderMax} step={1}
+                    value={chargeMax} setValue={setChargeMax}
+                    hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
+                  <Slider label="Max discharge power" unit="MW" min={1} max={powerSliderMax} step={1}
+                    value={dischargeMax} setValue={setDischargeMax}
+                    hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
                 </div>
                 <div className="hairline my-4"></div>
                 <div>
@@ -619,9 +634,9 @@ export default function App() {
                 </div>
                 <div className="hairline my-4"></div>
                 <div>
-                  <Slider label="Installed capacity (wind/solar)" unit="MW" min={1} max={200} step={1}
+                  <Slider label="Installed capacity (wind/solar)" unit="MW" min={1} max={installedSliderMax} step={1}
                     value={installedCapacityMW} setValue={setInstalledCapacityMW}
-                    hint={`grid export ceiling · sweep uses this as fixed limit`} />
+                    hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW) · grid export ceiling`} />
                   <Slider label="Starting charge level" unit="" min={0} max={1} step={0.05}
                     value={initialSOC} setValue={setInitialSOC}
                     hint={`≈ ${(initialSOC * capacity).toFixed(1)} MWh stored`} />
@@ -726,7 +741,7 @@ export default function App() {
                 canApplyPlantRange={hasUnappliedChanges}
                 boboSeriesError={boboSeriesError}
                 pvReconstructEnabled={pvReconstructEnabled}
-                setPvReconstructEnabled={setPvReconstructEnabled}
+                onPvReconstructEnabled={handlePvReconstructEnabled}
                 clippingLimitMW={clippingLimitMW}
                 setClippingLimitMW={setClippingLimitMW}
                 pvDayThr={pvDayThr}

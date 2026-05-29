@@ -251,7 +251,7 @@ export const DataInputCard = memo(({
   boboStartDate, boboEndDate, onBoboStartDateChange, onBoboEndDateChange,
   onApplyPlantRange, canApplyPlantRange,
   boboSeriesError,
-  pvReconstructEnabled, setPvReconstructEnabled,
+  pvReconstructEnabled, onPvReconstructEnabled,
   clippingLimitMW, setClippingLimitMW,
   pvDayThr, setPvDayThr,
   pvWideGap, setPvWideGap,
@@ -277,7 +277,7 @@ export const DataInputCard = memo(({
   canApplyPlantRange: boolean;
   boboSeriesError: string | null;
   pvReconstructEnabled: boolean;
-  setPvReconstructEnabled: (v: boolean) => void;
+  onPvReconstructEnabled: (enabled: boolean) => void;
   clippingLimitMW: number | null;
   setClippingLimitMW: (v: number | null) => void;
   pvDayThr: number;
@@ -294,16 +294,7 @@ export const DataInputCard = memo(({
   const [windText,  setWindText]  = useState('');
   const [message,   setMessage]   = useState<FlashMsg | null>(null);
 
-  const draftHorizonTrim = useMemo((): HorizonTrimInfo | null => {
-    if (!pvReconstructEnabled) return null;
-    const n = customData ? Math.min(customData.price.length, customData.wind.length) : defaultLen;
-    const usedHours = Math.floor(n / 24) * 24;
-    const droppedHours = n - usedHours;
-    if (droppedHours <= 0) return null;
-    return { originalHours: n, usedHours, droppedHours };
-  }, [pvReconstructEnabled, customData, defaultLen]);
-
-  const trimNotice = horizonTrim ?? draftHorizonTrim;
+  const trimNotice = pvReconstructEnabled ? horizonTrim : null;
 
   const handleLoad = () => {
     onClearBoboInflight?.();
@@ -553,25 +544,24 @@ export const DataInputCard = memo(({
           PV clipping reconstruction
         </div>
         <div className="grid grid-cols-2 gap-1 mb-3">
-          <button onClick={() => setPvReconstructEnabled(true)}
+          <button onClick={() => onPvReconstructEnabled(true)}
             className={`py-2 text-xs font-mono border transition-colors ${pvReconstructEnabled
               ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
               : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
             }`}>PV mode ON</button>
-          <button onClick={() => setPvReconstructEnabled(false)}
+          <button onClick={() => onPvReconstructEnabled(false)}
             className={`py-2 text-xs font-mono border transition-colors ${!pvReconstructEnabled
               ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
               : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
             }`}>PV mode OFF</button>
         </div>
 
-        {pvReconstructEnabled && trimNotice && (
+        {trimNotice && (
           <div className="mb-3 text-[10px] font-mono text-[color:var(--accent-amber)] leading-relaxed">
-            Horizon shortened to {trimNotice.usedHours.toLocaleString()} h
-            ({Math.floor(trimNotice.usedHours / 24)} full days) for PV reconstruction;
+            At last optimize with PV mode: horizon shortened to {trimNotice.usedHours.toLocaleString()} h
+            ({Math.floor(trimNotice.usedHours / 24)} full days);
             last {trimNotice.droppedHours.toLocaleString()} h of{' '}
-            {trimNotice.originalHours.toLocaleString()} h omitted
-            {horizonTrim ? ' (applied at last optimize)' : ' (will apply on optimize)'}.
+            {trimNotice.originalHours.toLocaleString()} h omitted.
           </div>
         )}
 
@@ -582,8 +572,8 @@ export const DataInputCard = memo(({
               value={clippingLimitMW ?? Math.max(...(customData?.wind ?? WIND_DATA))}
               setValue={setClippingLimitMW}
               hint={clippingLimitMW === null
-                ? 'No clipping plateau detected — data appears unclipped'
-                : 'Auto-detected from data; adjust if needed'} />
+                ? 'Detected at optimize (or set manually before optimizing)'
+                : 'From last optimize or manual; used on next optimize'} />
 
             <details className="mt-1">
               <summary className="text-[10px] font-mono text-[color:var(--text-dim)] py-1 cursor-pointer"
@@ -604,7 +594,7 @@ export const DataInputCard = memo(({
             </details>
 
             {/* Warning when data doesn't look like clipped PV */}
-            {pvReconstructStats && horizonTrim && pvReconstructStats.clippedHours / horizonTrim.usedHours > 0.5 && (
+            {pvReconstructStats && trimNotice && pvReconstructStats.clippedHours / trimNotice.usedHours > 0.5 && (
               <div className="mt-2 text-[10px] font-mono text-[color:var(--accent-amber)] leading-relaxed">
                 ⚠ Most hours detected as clipped ({pvReconstructStats.clippedHours.toLocaleString()} of {(customData?.price.length ?? 0).toLocaleString()}).<br/>
                 Generation data may not be PV with clipping at this limit.

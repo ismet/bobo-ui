@@ -24,6 +24,14 @@ export function plotAll<T extends Record<string, unknown>>(arr: T[]): Array<T & 
   return arr.map((d, i) => ({ ...d, idx: i }));
 }
 
+/** Peak hourly generation (MW) in the plant input series. */
+export function peakGenerationMW(wind: number[]): number {
+  if (wind.length === 0) return 1;
+  let peak = 0;
+  for (const w of wind) if (w > peak) peak = w;
+  return Math.max(peak, 1);
+}
+
 export function fingerprintSeriesSample(pricePeriod: number[], windPeriod: number[]): string {
   const n = pricePeriod.length;
   if (n <= 0 || windPeriod.length !== n) return '0';
