@@ -262,6 +262,86 @@ export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) 
   );
 });
 
+// ---- PV reconstruction: measured vs reconstructed generation ----
+export const PvGenerationCompareChart = memo(({ result }: { result: OptimizationRunResult }) => {
+  const measured = result.windPeriodMeasured;
+  const { windPeriod, traj, dt, pvReconstructStats } = result;
+  const hasData = !!measured && measured.length === traj.length;
+
+  const data = useMemo(() => {
+    if (!hasData || !measured) return [];
+    return plotAll(traj.map((r, i) => ({
+      t: r.t,
+      measured: measured[i],
+      reconstructed: windPeriod[i] ?? r.wind,
+    })));
+  }, [hasData, traj, measured, windPeriod]);
+
+  const showTime = dt < 1;
+  const zoom = useZoom(data.length);
+  const iso = useIsolation();
+
+  const diffMwh = useMemo(() => {
+    if (!hasData || !measured) return 0;
+    let sum = 0;
+    for (let i = 0; i < traj.length; i++) {
+      sum += (windPeriod[i] ?? traj[i].wind) - measured[i];
+    }
+    return sum * dt;
+  }, [hasData, traj, measured, windPeriod, dt]);
+
+  if (!hasData) return null;
+
+  return (
+    <div className="card p-5 mb-6">
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">PV clipping reconstruction</div>
+          <div className="font-display text-lg">
+            Measured vs reconstructed generation
+            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} epochUtcMs={result.chartEpochUtcMs} />
+          </div>
+          {pvReconstructStats && (
+            <div className="text-[11px] font-mono text-[color:var(--text-dim)] mt-1">
+              {pvReconstructStats.clippedHours.toLocaleString()} h adjusted
+              {' · '}
+              {pvReconstructStats.recoveredEnergyMWh.toFixed(1)} MWh recovered (recon − measured)
+              {' · '}
+              net Δ {diffMwh >= 0 ? '+' : ''}{diffMwh.toFixed(1)} MWh over horizon
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 text-[11px] font-mono text-[color:var(--text-dim)]">
+          <LegendChip iso={iso} isoKey="measured" label="measured MW"
+            swatch={<span className="inline-block w-2 h-2 rounded-full border border-[color:var(--text-faint)]" style={{ background: 'var(--text-dim)' }}></span>}/>
+          <LegendChip iso={iso} isoKey="reconstructed" label="reconstructed MW"
+            swatch={<span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--accent-teal)' }}></span>}/>
+        </div>
+      </div>
+      <div style={{ width: '100%', height: 300 }}>
+        <ResponsiveContainer>
+          <ComposedChart key={zoom.resetKey} data={data} margin={{ top: 5, right: 16, left: -8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
+            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length - 1)].t * dt, showTime, result.chartEpochUtcMs)}
+                   minTickGap={60} stroke="var(--text-faint)"/>
+            <YAxis stroke="var(--text-faint)" width={48}
+                   label={{ value: 'MW', angle: -90, position: 'insideLeft', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
+            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length - 1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
+            <Line type="monotone" dataKey="measured" name="measured" hide={!iso.active('measured')}
+                  stroke="var(--text-dim)" dot={false} strokeWidth={1.2} strokeDasharray="4 3"/>
+            <Line type="monotone" dataKey="reconstructed" name="reconstructed" hide={!iso.active('reconstructed')}
+                  stroke="var(--accent-teal)" dot={false} strokeWidth={1.6}/>
+            <Brush dataKey="idx" height={26} stroke="var(--accent-teal)"
+                   fill="var(--bg)" travellerWidth={8}
+                   onChange={zoom.onChange}
+                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length - 1)].t * dt, false, result.chartEpochUtcMs)}/>
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+});
+
 // ---- CHART 2: Battery SOC + action ----
 export const DispatchChart = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj, dt } = result;

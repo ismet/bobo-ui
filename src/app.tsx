@@ -13,6 +13,7 @@ import {
   MarketOverview,
   PriceDurationCurve,
   ActionHistogram,
+  PvGenerationCompareChart,
   UpliftChart,
 } from './charts/resultCharts';
 import { DataInputCard, type PowerPlantRow } from './panels/dataInputPanels';
@@ -791,6 +792,7 @@ export default function App() {
                   : 'Press Optimize to run dispatch.'} />
               {appliedResult && <KPIRow result={appliedResult} />}
               {appliedResult && <ChartsPanel result={appliedResult} />}
+              {appliedResult && <PvGenerationCompareChart result={appliedResult} />}
               {appliedResult && (
                 <>
                   <SectionHeader eyebrow="03 · dispatch &amp; cycling"
