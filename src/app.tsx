@@ -29,6 +29,7 @@ import {
   normalizePowerPlantsPayload,
   peakGenerationMW,
   ymdToUtcMidnightMs,
+  type PredefinedDateRange,
 } from './formatUtils';
 import { runOptimizationDelegated } from './engine/optimizationRunner';
 import { reconstructGeneration, detectClippingLimitMW } from './engine/reconstructGeneration';
@@ -108,6 +109,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const initialBoboDateRange = useMemo(() => boboDefaultDateRange(), []);
   const [boboStartDate, setBoboStartDate] = useState(initialBoboDateRange.startDate); // (draft)
   const [boboEndDate, setBoboEndDate] = useState(initialBoboDateRange.endDate); // (draft)
+  const [selectedDateRange, setSelectedDateRange] = useState<PredefinedDateRange | null>('1w');
   const [hasUnappliedChanges, setHasUnappliedChanges] = useState(true);
 
   const setCustomDataWithSource = useCallback((data: SeriesData | null, fromBobo = false) => {
@@ -737,6 +739,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                 boboEndDate={boboEndDate}
                 onBoboStartDateChange={(v: string) => { setBoboStartDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
                 onBoboEndDateChange={(v: string) => { setBoboEndDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
+                selectedDateRange={selectedDateRange}
+                setSelectedDateRange={setSelectedDateRange}
                 onApplyPlantRange={handleApplyPlantRange}
                 canApplyPlantRange={hasUnappliedChanges}
                 boboSeriesError={boboSeriesError}

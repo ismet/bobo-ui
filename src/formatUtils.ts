@@ -121,6 +121,29 @@ export function boboDefaultDateRange(): { startDate: string; endDate: string } {
   return { startDate: formatLocalYMD(start), endDate: formatLocalYMD(end) };
 }
 
+export type PredefinedDateRange = '1w' | '1m' | '3m' | '6m' | '1y' | '2y';
+
+export const PREDEFINED_DATE_RANGES: { key: PredefinedDateRange; label: string }[] = [
+  { key: '1w', label: 'Last 1 week' },
+  { key: '1m', label: 'Last 1 month' },
+  { key: '3m', label: 'Last 3 months' },
+  { key: '6m', label: 'Last 6 months' },
+  { key: '1y', label: 'Last 1 year' },
+  { key: '2y', label: 'Last 2 years' },
+];
+
+export function computePredefinedRange(key: PredefinedDateRange): { startDate: string; endDate: string } {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  end.setDate(end.getDate() - 1);
+  const start = new Date(end);
+  const days: Record<PredefinedDateRange, number> = {
+    '1w': 7, '1m': 30, '3m': 90, '6m': 180, '1y': 365, '2y': 730,
+  };
+  start.setDate(start.getDate() - days[key]);
+  return { startDate: formatLocalYMD(start), endDate: formatLocalYMD(end) };
+}
+
 export type HorizonTrimInfo = {
   originalHours: number;
   usedHours: number;

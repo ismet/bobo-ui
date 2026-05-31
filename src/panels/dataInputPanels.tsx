@@ -3,7 +3,7 @@
 // ============================================================================
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PRICE_DATA, WIND_DATA } from '../data/constants';
-import { parsePaste, type HorizonTrimInfo } from '../formatUtils';
+import { parsePaste, type HorizonTrimInfo, type PredefinedDateRange, PREDEFINED_DATE_RANGES, computePredefinedRange } from '../formatUtils';
 import { NumberInput } from '../uiPrimitives';
 import type { ChangeEvent, CSSProperties, DragEvent, KeyboardEvent } from 'react';
 
@@ -249,6 +249,7 @@ export const DataInputCard = memo(({
   powerPlants, plantsLoading, plantsError,
   seriesLoading, selectedPlantId, onPickPlant,
   boboStartDate, boboEndDate, onBoboStartDateChange, onBoboEndDateChange,
+  selectedDateRange, setSelectedDateRange,
   onApplyPlantRange, canApplyPlantRange,
   boboSeriesError,
   pvReconstructEnabled, onPvReconstructEnabled,
@@ -273,6 +274,8 @@ export const DataInputCard = memo(({
   boboEndDate: string;
   onBoboStartDateChange: (value: string) => void;
   onBoboEndDateChange: (value: string) => void;
+  selectedDateRange: PredefinedDateRange | null;
+  setSelectedDateRange: (v: PredefinedDateRange | null) => void;
   onApplyPlantRange: () => void;
   canApplyPlantRange: boolean;
   boboSeriesError: string | null;
@@ -417,14 +420,36 @@ export const DataInputCard = memo(({
         onPickPlant={onPickPlant}
       />
       <div className="mb-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <label className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">
+            Quick range
+            <select
+              value={selectedDateRange ?? ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  const key = val as PredefinedDateRange;
+                  setSelectedDateRange(key);
+                  const range = computePredefinedRange(key);
+                  onBoboStartDateChange(range.startDate);
+                  onBoboEndDateChange(range.endDate);
+                }
+              }}
+              className="mt-1 w-full border border-[color:var(--border)] bg-[color:var(--bg)] px-2 py-2 text-xs text-[color:var(--text)] font-mono"
+            >
+              <option value="" hidden></option>
+              {PREDEFINED_DATE_RANGES.map(r => (
+                <option key={r.key} value={r.key}>{r.label}</option>
+              ))}
+            </select>
+          </label>
           <label className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">
             Start date
             <input
               type="date"
               value={boboStartDate}
               max={boboEndDate || yesterday}
-              onChange={(e) => onBoboStartDateChange(e.target.value)}
+              onChange={(e) => { setSelectedDateRange(null); onBoboStartDateChange(e.target.value); }}
               className="mt-1 w-full border border-[color:var(--border)] bg-[color:var(--bg)] px-2 py-2 text-xs text-[color:var(--text)] font-mono"
             />
           </label>
@@ -435,7 +460,7 @@ export const DataInputCard = memo(({
               value={boboEndDate}
               min={boboStartDate}
               max={yesterday}
-              onChange={(e) => onBoboEndDateChange(e.target.value)}
+              onChange={(e) => { setSelectedDateRange(null); onBoboEndDateChange(e.target.value); }}
               className="mt-1 w-full border border-[color:var(--border)] bg-[color:var(--bg)] px-2 py-2 text-xs text-[color:var(--text)] font-mono"
             />
           </label>
