@@ -11,7 +11,7 @@
     --accent-amber:  #fb923c;
     --accent-violet: #a78bfa;
     --accent-green:  #34d399;
-    --accent-rose:   #f87171;
+    --accent-rose:   #ff6b81;
   }
   html, body { background: var(--bg); color: var(--text); }
   body {

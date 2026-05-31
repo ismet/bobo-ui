@@ -398,7 +398,7 @@ export const DispatchChart = memo(({ result }: { result: OptimizationRunResult }
             <Bar yAxisId="right" dataKey="discharge" name="discharge" hide={!iso.active('discharge')}
                  fill="var(--accent-teal)" fillOpacity={0.7}/>
             <Bar yAxisId="right" dataKey="charge" name="charge" hide={!iso.active('charge')}
-                 fill="var(--accent-rose)" fillOpacity={0.7}/>
+                 fill="var(--accent-rose)" fillOpacity={0.85}/>
             <Line yAxisId="left" type="monotone" dataKey="soc" name="stored energy" hide={!iso.active('soc')}
                   stroke="var(--accent-violet)" dot={false} strokeWidth={1.6}/>
             <Brush dataKey="idx" height={26} stroke="var(--accent-violet)"
@@ -469,7 +469,7 @@ export const BatteryVsPriceChart = memo(({ result }: { result: OptimizationRunRe
             <Bar yAxisId="right" dataKey="discharge" name="discharge" hide={!iso.active('discharge')}
                  fill="var(--accent-teal)" fillOpacity={0.75}/>
             <Bar yAxisId="right" dataKey="charge"    name="charge"    hide={!iso.active('charge')}
-                 fill="var(--accent-rose)" fillOpacity={0.75}/>
+                 fill="var(--accent-rose)" fillOpacity={0.85}/>
             <Line yAxisId="left" type="monotone" dataKey="price" name="price" hide={!iso.active('price')}
                   stroke="var(--accent-amber)" dot={false} strokeWidth={1.6}/>
             <Brush dataKey="idx" height={26} stroke="var(--accent-amber)"

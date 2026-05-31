@@ -223,9 +223,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   useLayoutEffect(() => {
     if (optimizeOverlayDismissTick === 0 || appliedResult == null) return;
 
-    const horizonHours = appliedResult.traj.length * appliedResult.dt;
-    const numDays = horizonHours / 24;
-    const dismissDelayMs = Math.max(0, numDays * 10);
+    const dismissDelayMs = 500;
 
     let cancelled = false;
     /** Idle vs immediate fallback */
@@ -587,11 +585,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
             <span className="italic text-[color:var(--accent-teal)]"> power plant</span>
             <span className="text-[color:var(--text-dim)]">.</span>
           </h1>
-          <p className="mt-5 max-w-2xl text-[color:var(--text-dim)] leading-relaxed">
-            For battery producers and integrators: show customers how co-located BESS raises revenue and clarifies cycling when
-            storage works alongside generation—optimized dispatch for wholesale signals, export limits, and your efficiency assumptions.
-            Pull hourly price and generation from registered plants (EPİAŞ transparency ecosystem), paste your own series, or use the bundled sample.
-          </p>
         </section>
 
         {/* Controls + KPIs — flex (not grid) so when aside unmounts the main panel actually grows to full width */}
