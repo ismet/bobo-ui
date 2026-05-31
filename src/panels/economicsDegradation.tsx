@@ -2,7 +2,6 @@
 // ECONOMICS CARD — battery cost, interest rate, lifetime → CRF / annualisation
 // ============================================================================
 import { memo, useMemo } from 'react';
-import type { CSSProperties } from 'react';
 import { fmtMoney } from '../formatUtils';
 
 export const EconomicsCard = memo(({
@@ -25,13 +24,6 @@ export const EconomicsCard = memo(({
   const capex     = batteryCostPerKWh * capacity * 1000;
   const annualised = capex * crf;
 
-  const numStyle: CSSProperties = {
-    background: 'var(--bg)', border: '1px solid var(--border)',
-    borderRadius: 4, color: 'var(--text)', padding: '6px 10px',
-    fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
-    width: '100%', textAlign: 'right', outline: 'none'
-  };
-
   return (
     <div className="mt-6 card p-5">
       <div className="flex items-center justify-between mb-3">
@@ -51,21 +43,21 @@ export const EconomicsCard = memo(({
         </label>
         <input type="number" value={batteryCostPerKWh} min={0} max={2000} step={10}
                onChange={e => setBatteryCostPerKWh(Math.max(0, Number(e.target.value) || 0))}
-               style={{ ...numStyle, width: 90 }}/>
+               className="num-input"/>
 
         <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
           Interest rate <span className="text-[color:var(--text-faint)]">% / yr</span>
         </label>
         <input type="number" value={interestRatePct} min={0} max={30} step={0.1}
                onChange={e => setInterestRatePct(Math.max(0, Number(e.target.value) || 0))}
-               style={{ ...numStyle, width: 90 }}/>
+               className="num-input"/>
 
         <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
           Lifetime <span className="text-[color:var(--text-faint)]">years</span>
         </label>
         <input type="number" value={lifetimeYears} min={1} max={50} step={1}
                onChange={e => setLifetimeYears(Math.max(1, Math.round(Number(e.target.value) || 1)))}
-               style={{ ...numStyle, width: 90 }}/>
+               className="num-input"/>
       </div>
 
       <div className="hairline my-4"></div>
@@ -156,13 +148,6 @@ export const DegradationCard = memo(({
   const lifetimeThroughputMWh = assumedCycles * capacity * 2 * 0.9;
   const benchmarkWear = lifetimeThroughputMWh > 0 ? capex / lifetimeThroughputMWh : 0;
 
-  const numStyle: CSSProperties = {
-    background: 'var(--bg)', border: '1px solid var(--border)',
-    borderRadius: 4, color: 'var(--text)', padding: '6px 10px',
-    fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
-    width: 90, textAlign: 'right', outline: 'none'
-  };
-
   // Mini sparkline of the fade curve (drawn inline as SVG)
   const W = 240, H = 60, PAD_L = 28, PAD_R = 8, PAD_T = 8, PAD_B = 16;
   const innerW = W - PAD_L - PAD_R, innerH = H - PAD_T - PAD_B;
@@ -192,7 +177,7 @@ export const DegradationCard = memo(({
         </label>
         <input type="number" value={wearCost} min={0} max={200} step={1}
                onChange={e => setWearCost(Math.max(0, Number(e.target.value) || 0))}
-               style={numStyle}/>
+               className="num-input"/>
       </div>
       <div className="text-[10px] text-[color:var(--text-faint)] mb-4" style={{ lineHeight: 1.5 }}>
         Aligns dispatch economics with cell stress: each MWh through the pack carries this €/MWh charge.
@@ -210,22 +195,28 @@ export const DegradationCard = memo(({
         </label>
         <input type="number" value={yearOneFadePct} min={0} max={20} step={0.1}
                onChange={e => setYearOneFadePct(Math.max(0, Number(e.target.value) || 0))}
-               style={numStyle}/>
+               className="num-input"/>
 
         <label className="text-[11px] text-[color:var(--text-dim)] font-mono">
           Long-term fade <span className="text-[color:var(--text-faint)]">% / yr</span>
         </label>
         <input type="number" value={longTermFadePct} min={0} max={10} step={0.1}
                onChange={e => setLongTermFadePct(Math.max(0, Number(e.target.value) || 0))}
-               style={numStyle}/>
+               className="num-input"/>
 
         <label className="text-[11px] text-[color:var(--text-dim)] font-mono">
           End-of-life retention <span className="text-[color:var(--text-faint)]">% nameplate · derived</span>
         </label>
         <div style={{
-          ...numStyle,
           background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
           color: 'var(--accent-rose)',
+          padding: '6px 10px',
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 13,
+          width: 90,
+          textAlign: 'right',
           fontWeight: 500,
           cursor: 'default',
           userSelect: 'none',

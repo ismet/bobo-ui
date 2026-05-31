@@ -21,28 +21,27 @@ export const SectionHeader = memo(({ eyebrow, title, kicker, action }: {
   );
 });
 
-export const Slider = memo(({ label, unit, value, setValue, min, max, step, hint }: {
+export const NumberInput = memo(({ label, unit, value, setValue, min, max, hint }: {
   label: string;
   unit: string;
   value: number;
   setValue: (v: number) => void;
   min: number;
   max: number;
-  step: number;
   hint?: string;
 }) => {
   return (
     <div className="mb-4">
-      <div className="flex items-baseline justify-between mb-1.5">
-        <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">{label}</label>
-        <span className="num text-sm text-[color:var(--accent-teal)]">
-          {Number(value).toFixed(step < 1 ? 2 : 0)} <span className="text-[color:var(--text-faint)] text-[10px]">{unit}</span>
-        </span>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
+          {label} {unit && <span className="text-[color:var(--text-faint)]">{unit}</span>}
+        </label>
+        <input
+          type="number" min={min} max={max} step={0.01} value={value}
+          className="num-input"
+          onChange={e => setValue(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
+        />
       </div>
-      <input
-        type="range" min={min} max={max} step={step} value={value}
-        onChange={e => setValue(parseFloat(e.target.value))}
-      />
       {hint && <div className="text-[10px] text-[color:var(--text-faint)] mt-1 font-mono">{hint}</div>}
     </div>
   );

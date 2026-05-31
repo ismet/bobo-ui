@@ -36,7 +36,7 @@ import type { ReconstructStats } from './engine/reconstructGeneration';
 import type { OptimizationParams } from './engine/types';
 import type { OptimizationRunResult } from './optimizationTypes';
 import { FullScreenJobOverlay } from './fullScreenJobOverlay';
-import { SectionHeader, Slider } from './uiPrimitives';
+import { SectionHeader, NumberInput } from './uiPrimitives';
 
 export default function App({ onLogout }: { onLogout?: () => void }) {
   // Parameters (capacity / power limits auto-synced from input data peak — see useEffect below)
@@ -614,30 +614,30 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
               />
               <div className="card p-5">
                 <div>
-                  <Slider label="Battery capacity" unit="MWh" min={1} max={powerSliderMax} step={1}
+                  <NumberInput label="Battery capacity" unit="MWh" min={1} max={powerSliderMax}
                     value={capacity} setValue={setCapacity}
                     hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
-                  <Slider label="Max charge power" unit="MW" min={1} max={powerSliderMax} step={1}
+                  <NumberInput label="Max charge power" unit="MW" min={1} max={powerSliderMax}
                     value={chargeMax} setValue={setChargeMax}
                     hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
-                  <Slider label="Max discharge power" unit="MW" min={1} max={powerSliderMax} step={1}
+                  <NumberInput label="Max discharge power" unit="MW" min={1} max={powerSliderMax}
                     value={dischargeMax} setValue={setDischargeMax}
                     hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
                 </div>
                 <div className="hairline my-4"></div>
                 <div>
-                  <Slider label="Charge efficiency" unit="" min={0.7} max={0.99} step={0.01}
+                  <NumberInput label="Charge efficiency" unit="" min={0.7} max={0.99}
                     value={chargeEff} setValue={setChargeEff}
                     hint={`round-trip ≈ ${(chargeEff * dischargeEff * 100).toFixed(1)}%`} />
-                  <Slider label="Discharge efficiency" unit="" min={0.7} max={0.99} step={0.01}
+                  <NumberInput label="Discharge efficiency" unit="" min={0.7} max={0.99}
                     value={dischargeEff} setValue={setDischargeEff} />
                 </div>
                 <div className="hairline my-4"></div>
                 <div>
-                  <Slider label="Installed capacity (wind/solar)" unit="MW" min={1} max={installedSliderMax} step={1}
+                  <NumberInput label="Installed capacity (wind/solar)" unit="MW" min={1} max={installedSliderMax}
                     value={installedCapacityMW} setValue={setInstalledCapacityMW}
                     hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW) · grid export ceiling`} />
-                  <Slider label="Starting charge level" unit="" min={0} max={1} step={0.05}
+                  <NumberInput label="Starting charge level" unit="" min={0} max={1}
                     value={initialSOC} setValue={setInitialSOC}
                     hint={`≈ ${(initialSOC * capacity).toFixed(1)} MWh stored`} />
                 </div>

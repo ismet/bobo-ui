@@ -4,7 +4,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PRICE_DATA, WIND_DATA } from '../data/constants';
 import { parsePaste, type HorizonTrimInfo } from '../formatUtils';
-import { Slider } from '../uiPrimitives';
+import { NumberInput } from '../uiPrimitives';
 import type { ChangeEvent, CSSProperties, DragEvent, KeyboardEvent } from 'react';
 
 export type FlashMsg = { tone: 'error' | 'info'; text: string };
@@ -567,8 +567,8 @@ export const DataInputCard = memo(({
 
         {pvReconstructEnabled && (
           <>
-            <Slider label="Inverter clipping limit" unit="MW"
-              min={0.01} max={50} step={0.01}
+            <NumberInput label="Inverter clipping limit" unit="MW"
+              min={0.01} max={50}
               value={clippingLimitMW ?? Math.max(...(customData?.wind ?? WIND_DATA))}
               setValue={setClippingLimitMW}
               hint={clippingLimitMW === null
@@ -581,13 +581,13 @@ export const DataInputCard = memo(({
                 <span style={{ color: 'var(--accent-teal)' }}>▸</span> advanced settings
               </summary>
               <div className="mt-2">
-                <Slider label="Daytime threshold" unit="MW" min={0.01} max={1} step={0.01}
+                <NumberInput label="Daytime threshold" unit="MW" min={0.01} max={1}
                   value={pvDayThr} setValue={setPvDayThr}
                   hint="Values below this (nighttime) are not used as fitting anchors" />
-                <Slider label="Wide gap threshold" unit="hrs" min={1} max={12} step={1}
+                <NumberInput label="Wide gap threshold" unit="hrs" min={1} max={12}
                   value={pvWideGap} setValue={setPvWideGap}
                   hint="Consecutive clipped hours triggering peak scaling" />
-                <Slider label="Peak factor" unit="×" min={1} max={3} step={0.05}
+                <NumberInput label="Peak factor" unit="×" min={1} max={3}
                   value={pvPeakFactor} setValue={setPvPeakFactor}
                   hint="Reconstructed peak ≥ this × inverter limit on wide-gap days" />
               </div>
