@@ -300,14 +300,27 @@ export const PvGenerationCompareChart = memo(({ result }: { result: Optimization
   const zoom = useZoom(data.length);
   const iso = useIsolation();
 
-  const diffMwh = useMemo(() => {
-    if (!hasData || !measured) return 0;
-    let sum = 0;
+  const { diffMwh, measuredTotalMwh, reconstructedTotalMwh } = useMemo(() => {
+    if (!hasData || !measured) return { diffMwh: 0, measuredTotalMwh: 0, reconstructedTotalMwh: 0 };
+    let diff = 0;
+    let measuredSum = 0;
+    let reconSum = 0;
     for (let i = 0; i < traj.length; i++) {
-      sum += (windPeriod[i] ?? traj[i].wind) - measured[i];
+      const recon = windPeriod[i] ?? traj[i].wind;
+      diff += recon - measured[i];
+      measuredSum += measured[i];
+      reconSum += recon;
     }
-    return sum * dt;
+    return {
+      diffMwh: diff * dt,
+      measuredTotalMwh: measuredSum * dt,
+      reconstructedTotalMwh: reconSum * dt,
+    };
   }, [hasData, traj, measured, windPeriod, dt]);
+
+  const netPct = measuredTotalMwh > 0 ? (diffMwh / measuredTotalMwh) * 100 : null;
+  const fmtMwh = (v: number) => Math.round(v).toLocaleString();
+  const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v)}`;
 
   if (!hasData) return null;
 
@@ -322,11 +335,19 @@ export const PvGenerationCompareChart = memo(({ result }: { result: Optimization
           </div>
           {pvReconstructStats && (
             <div className="text-[11px] font-mono text-[color:var(--text-dim)] mt-1">
+              {fmtMwh(measuredTotalMwh)} MWh measured
+              {' · '}
+              {fmtMwh(reconstructedTotalMwh)} MWh reconstructed
+              {' · '}
               {pvReconstructStats.clippedHours.toLocaleString()} h adjusted
               {' · '}
-              {pvReconstructStats.recoveredEnergyMWh.toFixed(1)} MWh recovered (recon − measured)
+              {fmtMwh(pvReconstructStats.recoveredEnergyMWh)} MWh recovered (recon − measured)
               {' · '}
-              net Δ {diffMwh >= 0 ? '+' : ''}{diffMwh.toFixed(1)} MWh over horizon
+              net Δ {fmtPct(diffMwh)} MWh
+              {netPct != null && (
+                <> ({fmtPct(netPct)}%)</>
+              )}
+              {' '}over horizon
             </div>
           )}
         </div>
