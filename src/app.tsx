@@ -615,23 +615,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     <div className="min-h-screen">
       <Header onLogout={onLogout} />
       <main className="w-full px-6 pb-24">
-        {/* Hero */}
-        <section className="pt-10 pb-8 grid-bg border-b border-[color:var(--border)] -mx-6 px-6 mb-10">
-          <div className="flex flex-wrap items-center gap-3 mb-6">
-            <span className="chip border-[color:var(--accent-teal)]/40 bg-[color:var(--accent-teal)]/10">
-              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent-teal)]"></span>
-              EPİAŞ-integrated
-            </span>
-            <span className="chip"><span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent-teal)]"></span>Plant-integrated BESS</span>
-            <span className="chip">Dispatch optimization</span>
-            <span className="chip">Utilization &amp; cycling</span>
-          </div>
-          <h1 className="font-display text-5xl md:text-6xl lg:text-7xl leading-[1.02] max-w-5xl">
-            Improve battery utilization at the
-            <span className="italic text-[color:var(--accent-teal)]"> power plant</span>
-            <span className="text-[color:var(--text-dim)]">.</span>
-          </h1>
-        </section>
+
 
         {/* Controls + KPIs — flex (not grid) so when aside unmounts the main panel actually grows to full width */}
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start mb-10">

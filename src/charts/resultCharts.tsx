@@ -20,17 +20,8 @@ export function Header({ onLogout }: { onLogout?: () => void }) {
           </svg>
           <div className="min-w-0">
             <div className="font-display text-lg leading-none">Plant BESS studio</div>
-            <div className="text-[10px] text-[color:var(--text-faint)] font-mono uppercase tracking-wider">
-              <span className="text-[color:var(--accent-teal)]">EPİAŞ-integrated</span>
-              {' · '}
-              <a
-                href="https://www.epias.com.tr/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline decoration-[color:var(--border-strong)] underline-offset-2 hover:text-[color:var(--text-dim)]"
-              >
-                Enerji Piyasaları İşletme A.Ş.
-              </a>
+            <div className="text-xs text-[color:var(--text-dim)] mt-1">
+              Improve battery utilization at the power plant.
             </div>
           </div>
         </div>
