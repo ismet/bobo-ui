@@ -2,8 +2,7 @@
 // DATA INPUT CARD — paste your own price & generation series
 // ============================================================================
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { PRICE_DATA, WIND_DATA } from '../data/constants';
-import { parsePaste, type HorizonTrimInfo, type PredefinedDateRange, PREDEFINED_DATE_RANGES, computePredefinedRange } from '../formatUtils';
+import { parsePaste, peakGenerationMW, type HorizonTrimInfo, type PredefinedDateRange, PREDEFINED_DATE_RANGES, computePredefinedRange } from '../formatUtils';
 import { NumberInput } from '../uiPrimitives';
 import type { ChangeEvent, CSSProperties, DragEvent, KeyboardEvent } from 'react';
 
@@ -244,7 +243,7 @@ export function PowerPlantCombobox({
 }
 
 export const DataInputCard = memo(({
-  customData, setCustomData, defaultLen,
+  customData, setCustomData,
   onClearBoboInflight,
   powerPlants, plantsLoading, plantsError,
   seriesLoading, selectedPlantId, onPickPlant,
@@ -262,7 +261,6 @@ export const DataInputCard = memo(({
 }: {
   customData: { price: number[]; wind: number[] } | null;
   setCustomData: (data: { price: number[]; wind: number[] } | null, fromBobo?: boolean) => void;
-  defaultLen: number;
   onClearBoboInflight?: () => void;
   powerPlants: PowerPlantRow[];
   plantsLoading: boolean;
@@ -346,14 +344,6 @@ export const DataInputCard = memo(({
     setPriceText(''); setWindText('');
   };
 
-  const fillSample = () => {
-    // Give the user a quick one-week sample to show format
-    const samplePrice = PRICE_DATA.slice(0, 72).map(x => x.toFixed(2)).join('\n');
-    const sampleWind  = WIND_DATA.slice(0, 72).map(x => x.toFixed(3)).join('\n');
-    setPriceText(samplePrice); setWindText(sampleWind);
-    setMessage({ tone: 'info', text: `Filled with 72h of the default dataset — hit Load.` });
-  };
-
   const textareaStyle: CSSProperties = {
     background: 'var(--bg)', border: '1px solid var(--border)',
     borderRadius: 4, color: 'var(--text)', padding: '8px 10px',
@@ -396,15 +386,15 @@ export const DataInputCard = memo(({
             EPİAŞ-connected · plant &amp; market series
           </div>
           <div className="font-display text-base mt-1">
-            {customData ? 'Custom dataset' : 'Default dataset'}
+            {customData ? 'Loaded dataset' : 'No dataset loaded'}
             <span className="text-[color:var(--text-dim)] font-mono text-xs ml-2">
-              {(customData ? customData.price.length : defaultLen).toLocaleString()}h
+              {(customData?.price.length ?? 0).toLocaleString()}h
             </span>
           </div>
         </div>
         <span className="chip">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: customData ? 'var(--accent-violet)' : 'var(--accent-teal)' }}></span>
-          {customData ? 'custom' : 'default'}
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: customData ? 'var(--accent-violet)' : 'var(--text-faint)' }}></span>
+          {customData ? 'loaded' : 'none'}
         </span>
       </div>
 
@@ -513,17 +503,11 @@ export const DataInputCard = memo(({
 
             <div className="flex gap-2">
               <button onClick={handleLoad} className="btn-primary" style={{ flex: 1 }}>Load data</button>
-              <button onClick={fillSample}
-                      style={{ padding: '10px 12px', border: '1px solid var(--border)',
-                               borderRadius: 4, color: 'var(--text-dim)', fontSize: 12,
-                               fontFamily: 'DM Sans', fontWeight: 500 }}>
-                Sample
-              </button>
               <button onClick={handleReset}
                       style={{ padding: '10px 12px', border: '1px solid var(--border)',
                                borderRadius: 4, color: 'var(--text-dim)', fontSize: 12,
                                fontFamily: 'DM Sans', fontWeight: 500 }}>
-                Reset
+                Clear data
               </button>
             </div>
 
@@ -550,7 +534,7 @@ export const DataInputCard = memo(({
                     style={{ padding: '8px 12px', border: '1px solid var(--border)',
                              borderRadius: 4, color: 'var(--text-dim)', fontSize: 12,
                              fontFamily: 'DM Sans', fontWeight: 500 }}>
-              Reset to default
+              Clear data
             </button>
             {message && (
               <div className="text-xs font-mono" style={{
@@ -594,7 +578,7 @@ export const DataInputCard = memo(({
           <>
             <NumberInput label="Inverter clipping limit" unit="MW"
               min={0.01} max={50}
-              value={clippingLimitMW ?? Math.max(...(customData?.wind ?? WIND_DATA))}
+              value={clippingLimitMW ?? peakGenerationMW(customData?.wind ?? [])}
               setValue={setClippingLimitMW}
               hint={clippingLimitMW === null
                 ? 'Detected at optimize (or set manually before optimizing)'

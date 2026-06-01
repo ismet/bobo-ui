@@ -2,7 +2,6 @@
 /**
  * Measures runOptimization timing (baseline vs worker-thread), same inputs both runs.
  */
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { Worker } from 'node:worker_threads';
@@ -11,14 +10,16 @@ import { runOptimization } from '../src/engine/runOptimization.ts';
 import type { OptimizationParams } from '../src/engine/types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = join(__dirname, '..');
 
-type MarketJson = { price: number[]; wind: number[] };
-
-function loadMarketData(): MarketJson {
-  const raw = readFileSync(join(root, 'src/data/market-data.json'), 'utf8');
-  const d = JSON.parse(raw) as MarketJson;
-  return { price: d.price, wind: d.wind };
+function syntheticMarketData(n: number): { price: number[]; wind: number[] } {
+  const price: number[] = [];
+  const wind: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const hour = i % 24;
+    price.push(40 + hour * 2 + (i % 7) * 0.5);
+    wind.push(Math.min(12, 2 + hour * 0.35 + (i % 5) * 0.1));
+  }
+  return { price, wind };
 }
 
 function sliceLen(arr: number[], steps: number): number[] {
@@ -128,7 +129,7 @@ const defaultParams = (steps: number): OptimizationParams => ({
 
 console.log('# DP benchmark (node, same machine as Cursor)\n');
 
-const { price: fullP, wind: fullW } = loadMarketData();
+const { price: fullP, wind: fullW } = syntheticMarketData(8760);
 
 const workerBenchPath = join(__dirname, 'dp-worker-thread.ts');
 

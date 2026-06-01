@@ -20,7 +20,6 @@ import { DataInputCard, type PowerPlantRow } from './panels/dataInputPanels';
 import { DegradationCard, EconomicsCard } from './panels/economicsDegradation';
 import { OutputTable } from './tables/outputTable';
 import { boboApiUrl } from './data/api';
-import { PRICE_DATA, WIND_DATA } from './data/constants';
 import {
   boboDefaultDateRange,
   formatLocalYMD,
@@ -41,15 +40,15 @@ import { SectionHeader, NumberInput } from './uiPrimitives';
 
 export default function App({ onLogout }: { onLogout?: () => void }) {
   // Parameters (capacity / power limits auto-synced from input data peak — see useEffect below)
-  const [capacity, setCapacity] = useState(() => peakGenerationMW(WIND_DATA));   // MWh (draft)
-  const [chargeMax, setChargeMax] = useState(() => peakGenerationMW(WIND_DATA));    // MW (draft)
-  const [dischargeMax, setDischargeMax] = useState(() => peakGenerationMW(WIND_DATA));   // MW (draft)
+  const [capacity, setCapacity] = useState(1);   // MWh (draft)
+  const [chargeMax, setChargeMax] = useState(1);    // MW (draft)
+  const [dischargeMax, setDischargeMax] = useState(1);   // MW (draft)
   const [chargeEff, setChargeEff] = useState(0.93); // frac (draft)
   const [dischargeEff, setDischargeEff] = useState(0.95); // frac (draft)
   const [initialSOC, setInitialSOC] = useState(0.5); // (draft)
   // Wind/solar installed capacity (MW) — sets the hard grid export ceiling.
   // null = use max(chargeMax, dischargeMax) as before.
-  const [installedCapacityMW, setInstalledCapacityMW] = useState(() => peakGenerationMW(WIND_DATA)); // (draft)
+  const [installedCapacityMW, setInstalledCapacityMW] = useState(1); // (draft)
   const [systemDesignOpen, setSystemDesignOpen] = useState(true);
 
   // Time step in hours (fixed): each row in data = 1 hour.
@@ -103,7 +102,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
 
   type SeriesData = { price: number[]; wind: number[] };
 
-  // User-pasted dataset (null = use embedded default) (draft)
+  // Loaded price & generation series (null = no data loaded) (draft)
   const [customData, setCustomData] = useState<SeriesData | null>(null);
   const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null); // (draft)
   const initialBoboDateRange = useMemo(() => boboDefaultDateRange(), []);
@@ -111,11 +110,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const [boboEndDate, setBoboEndDate] = useState(initialBoboDateRange.endDate); // (draft)
   const [selectedDateRange, setSelectedDateRange] = useState<PredefinedDateRange | null>('1w');
   const [hasUnappliedChanges, setHasUnappliedChanges] = useState(true);
-
-  const setCustomDataWithSource = useCallback((data: SeriesData | null, fromBobo = false) => {
-    if (data === null || !fromBobo) setSelectedPlantId(null);
-    setCustomData(data);
-  }, []);
 
   const [powerPlants, setPowerPlants] = useState<PowerPlantRow[]>([]);
   const [plantsLoading, setPlantsLoading] = useState(true);
@@ -152,16 +146,10 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     return (i * f) / (f - 1);
   }, [appliedInterestRatePct, appliedLifetimeYears, interestRatePct, lifetimeYears]);
 
-  const defaultSeriesFingerprint = useMemo(() => {
-    const n = PRICE_DATA.length;
-    const ph = fingerprintSeriesSample(PRICE_DATA, WIND_DATA);
-    return `${n}:${ph}`;
-  }, []);
-
   const draftScenarioKey = useMemo(() => {
-    const n = customData ? customData.price.length : PRICE_DATA.length;
-    const ph = customData ? fingerprintSeriesSample(customData.price, customData.wind) : defaultSeriesFingerprint.split(':')[1]!;
-    const seriesKey = `${n}:${ph}`;
+    const seriesKey = customData
+      ? `${customData.price.length}:${fingerprintSeriesSample(customData.price, customData.wind)}`
+      : '0:none';
     // Keep key stable + cheap to compare; stringify primitives only.
     return [
       'v1',
@@ -192,7 +180,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     ].join('|');
   }, [
     customData,
-    defaultSeriesFingerprint,
     selectedPlantId,
     boboStartDate,
     boboEndDate,
@@ -293,6 +280,40 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     setBoboSeriesError(null);
   }, []);
 
+  const clearAppliedSnapshot = useCallback(() => {
+    setAppliedScenarioKey(null);
+    setAppliedResult(null);
+    setAppliedBatteryCostPerKWh(null);
+    setAppliedInterestRatePct(null);
+    setAppliedLifetimeYears(null);
+    setAppliedYearOneFadePct(null);
+    setAppliedLongTermFadePct(null);
+  }, []);
+
+  const setCustomDataWithSource = useCallback((data: SeriesData | null, fromBobo = false) => {
+    if (data === null) {
+      setSelectedPlantId(null);
+      seriesFetchGenRef.current++;
+      optimGenRef.current++;
+      clearBoboInflight();
+      clearAppliedSnapshot();
+      setHasUnappliedChanges(true);
+      setErr(null);
+      setRunning(false);
+      setClippingLimitMW(null);
+      setCustomData(null);
+      return;
+    }
+
+    if (!fromBobo) setSelectedPlantId(null);
+    setErr(null);
+    const newKey = `${data.price.length}:${fingerprintSeriesSample(data.price, data.wind)}`;
+    if (appliedResult && appliedResult.spotWindRescaleKey !== newKey) {
+      clearAppliedSnapshot();
+    }
+    setCustomData(data);
+  }, [clearBoboInflight, clearAppliedSnapshot, appliedResult]);
+
   useEffect(() => () => { seriesAbortRef.current?.abort(); }, []);
 
   const handlePvReconstructEnabled = useCallback((enabled: boolean) => {
@@ -301,9 +322,9 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     setHasUnappliedChanges(true);
   }, []);
 
-  const inputWindForSizing = customData ? customData.wind : WIND_DATA;
+  const inputWindForSizing = customData?.wind ?? [];
   const inputSeriesSizingKey = useMemo(() => {
-    const price = customData ? customData.price : PRICE_DATA;
+    const price = customData?.price ?? [];
     return `${inputWindForSizing.length}:${fingerprintSeriesSample(price, inputWindForSizing)}`;
   }, [customData, inputWindForSizing]);
 
@@ -344,6 +365,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
         throw new Error('Non-finite values in series');
       }
       const data: SeriesData = { price, wind };
+      if (seriesFetchGenRef.current !== gen) return null;
       setCustomDataWithSource(data, true);
       setHasUnappliedChanges(false);
       return data;
@@ -366,8 +388,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   }, []);
 
   // Draft data source (for labels/hints only)
-  const draftActivePrice = useMemo(() => customData ? customData.price : PRICE_DATA, [customData]);
-  const draftActiveWind = useMemo(() => customData ? customData.wind : WIND_DATA, [customData]);
+  const draftActivePrice = useMemo(() => customData?.price ?? [], [customData]);
+  const draftActiveWind = useMemo(() => customData?.wind ?? [], [customData]);
   const draftPeakMW = useMemo(() => peakGenerationMW(draftActiveWind), [draftActiveWind]);
   const powerSliderMax = Math.max(100, Math.ceil(draftPeakMW * 1.25));
   const installedSliderMax = Math.max(200, Math.ceil(draftPeakMW * 1.25));
@@ -409,8 +431,13 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
 
     const snapKey = draftScenarioKey;
 
-    const snapPrice = snapCustomData ? snapCustomData.price : PRICE_DATA;
-    const snapWind = snapCustomData ? snapCustomData.wind : WIND_DATA;
+    if (!snapCustomData?.price?.length || snapCustomData.price.length < 24) {
+      setErr('Load at least 24 hours of price and generation data before optimizing.');
+      return null;
+    }
+
+    const snapPrice = snapCustomData.price;
+    const snapWind = snapCustomData.wind;
     const aligned = alignPriceWindSeries(
       snapPrice,
       snapWind,
@@ -705,12 +732,17 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                   <div className="text-[10px] font-mono text-[color:var(--text-faint)] mb-2">
                     each row in your data = {dt} h · {availableSteps.toLocaleString()} steps = {availableHours.toLocaleString()} h available
                   </div>
-                  {hasPendingChanges && (
+                  {hasPendingChanges && customData != null && (
                     <div className="mb-2 text-[10px] font-mono text-[color:var(--accent-amber)]">
                       Pending changes
                     </div>
                   )}
-                  <button onClick={() => { void optimize(); }} disabled={running}
+                  {!customData && (
+                    <div className="mb-2 text-[10px] font-mono text-[color:var(--text-faint)]">
+                      Load price &amp; generation data to enable optimization.
+                    </div>
+                  )}
+                  <button onClick={() => { void optimize(); }} disabled={running || customData == null}
                     className="btn-primary w-full flex items-center justify-center gap-2">
                     {running ? <><span className="spinner"></span> Optimizing dispatch…</> : <>Optimize dispatch ↗</>}
                   </button>
@@ -720,7 +752,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
               <DataInputCard
                 customData={customData}
                 setCustomData={setCustomDataWithSource}
-                defaultLen={PRICE_DATA.length}
                 onClearBoboInflight={clearBoboInflight}
                 powerPlants={powerPlants}
                 plantsLoading={plantsLoading}
@@ -801,7 +832,9 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
               <SectionHeader eyebrow="02 · plant BESS results" title="Revenue & utilization"
                 kicker={appliedResult
                   ? `${appliedResult.traj.length.toLocaleString()} intervals · optimized dispatch · charging from ${appliedResult.params.chargeFromGrid === false ? 'on-site generation only' : 'grid and on-site generation'}.`
-                  : 'Press Optimize to run dispatch.'} />
+                  : customData
+                    ? 'Press Optimize to run dispatch.'
+                    : 'Load price & generation data, then optimize.'} />
               {appliedResult && <KPIRow result={appliedResult} />}
               {appliedResult && <ChartsPanel result={appliedResult} />}
               {appliedResult && <PvGenerationCompareChart result={appliedResult} />}

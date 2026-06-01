@@ -39,7 +39,7 @@ export function fingerprintSeriesSample(pricePeriod: number[], windPeriod: numbe
   return idxs.map((i) => `${pricePeriod[i]},${windPeriod[i]}`).join('|');
 }
 
-/** Hourly charts default to bundled sample horizon (2024); EPİAŞ plant loads override via `chartEpochUtcMs`. */
+/** Default chart epoch for pasted/uploaded series; EPİAŞ plant loads override via `chartEpochUtcMs`. */
 export const DEFAULT_TS_EPOCH_MS = Date.UTC(2024, 0, 1);
 
 export function ymdToUtcMidnightMs(ymd: string): number {

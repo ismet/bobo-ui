@@ -21,7 +21,7 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
 |---|---|
 | `index.html` → `src/main.tsx` → `src/app.tsx` | Entry and all UI state |
 | `src/engine/` | DP solver (`runOptimization.ts`), worker bridge (`optimizationRunner.ts`, `optimizationWorker.ts`), `types.ts`, PV recon (`reconstructGeneration.ts`) |
-| `src/data/` | `api.ts` (API base URL), `constants.ts`, bundled `market-data.json` |
+| `src/data/` | `api.ts` (API base URL) |
 | `src/charts/` | `resultCharts.tsx`, `capacitySweepChart.tsx`, `chartInteractions.tsx` (brush zoom, legend isolation) |
 | `src/panels/` | `dataInputPanels.tsx`, `economicsDegradation.tsx` |
 | `src/tables/outputTable.tsx` | Paginated operation table + CSV |
@@ -43,7 +43,7 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
     - **Production build:** `https://bobo-api.onrender.com` unless `VITE_BOBO_API_BASE` is set at build time
   - `GET /power-plants` → plant list. Payload normalized by `normalizePowerPlantsPayload()` in `formatUtils.ts` (top-level array, or `{ data }`, `{ power_plants }`, `{ plants }`).
   - `GET /power-plants/{id}/prices-and-generation?start_date=…&end_date=…` → `{ prices: number[], powers: number[] }` (`powers` mapped to internal `wind` series).
-- **Default data**: `src/data/market-data.json` (minified) — **8,784** hourly samples for 2024 via `PRICE_DATA` / `WIND_DATA` in `constants.ts` when `customData` is null.
+- **No bundled default**: app starts with no series; user loads via EPİAŞ, paste, or file upload (`customData` state).
 - **Styling**: Hand-written CSS (`utilities.css` + `theme.css`). Google Fonts loaded from `index.html`.
 - **Deployment**: Render static site — `npm ci && npm run build`, publish `./dist`. Node `>=20 <23` in `package.json`.
 
@@ -123,7 +123,7 @@ Result charts use **`appliedResult`** trajectory values. Shared UX: `useZoom` (R
 | **OutputTable** | Paginated (**50** rows/page default), CSV export; derived columns (SOC %, wear, cumulative benefit, etc.) |
 | **CapacitySweepChart** | See below |
 
-Bundled / pasted charts use `DEFAULT_TS_EPOCH_MS` (`Date.UTC(2024,0,1)`). Plant loads set `chartEpochUtcMs` from `ymdToUtcMidnightMs(startDate)`.
+Pasted/uploaded charts use `DEFAULT_TS_EPOCH_MS` (`Date.UTC(2024,0,1)`). Plant loads set `chartEpochUtcMs` from `ymdToUtcMidnightMs(startDate)`.
 
 ## Capacity sweep chart
 
@@ -161,14 +161,13 @@ At sweep point closest to sidebar `capacity`: year table (retention, nominal upl
 
 ## Data input
 
-Active series: `customData ?? { price: PRICE_DATA, wind: WIND_DATA }`.
+Active series: `customData` only (null until loaded).
 
 | Source | How |
 |---|---|
-| **Bundled default** | `customData === null` → 2024 sample (8,784 h) |
-| **Paste** | Tab under “load price & generation series”; `parsePaste()` — 2-column if ≥75% rows have ≥2 numbers (and ≥5 such rows), else single column + separate generation box; min **24** rows |
-| **File upload** | CSV/JSON/TSV via `FileUploadPanel` (same column heuristics as documented in UI) |
 | **EPİAŞ plant** | Combobox + date range (max end = **yesterday**); **Load EPİAŞ data** fetches series then **auto-runs** `optimize()` |
+| **Paste** | Tab under “load price & generation series”; `parsePaste()` — min **24** rows |
+| **File upload** | CSV/JSON/TSV via `FileUploadPanel` |
 
 **PV mode** (orthogonal): when ON, optimize trims to full days and may reconstruct clipped generation (see above).
 

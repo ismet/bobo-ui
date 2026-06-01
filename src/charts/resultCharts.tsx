@@ -39,7 +39,6 @@ export function Header({ onLogout }: { onLogout?: () => void }) {
             EPİAŞ market signals
           </span>
           <span className="hidden sm:inline chip">PTF / plant series</span>
-          <span className="hidden md:inline text-[color:var(--text-faint)]">default: 8,784 h · 2024</span>
           {onLogout && (
             <button
               type="button"
