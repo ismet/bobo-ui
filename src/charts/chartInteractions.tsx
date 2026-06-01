@@ -84,13 +84,22 @@ export function LegendChip({ swatch, label, isoKey, iso }: {
   );
 }
 
-export function ZoomBadge({ zoom, dataLength, dt, traj, epochUtcMs }: {
+export function ZoomBadge({ zoom, dataLength, dt, traj, hourAtIndex, epochUtcMs }: {
   zoom: ReturnType<typeof useZoom>;
   dataLength: number;
   dt: number;
-  traj: TrajectoryStep[];
+  /** Trajectory-backed charts (dispatch results). */
+  traj?: TrajectoryStep[];
+  /** Input-series chart: hour offset at row index. */
+  hourAtIndex?: (index: number) => number;
   epochUtcMs?: number;
 }) {
+  const hour = (index: number) => {
+    const i = Math.min(index, dataLength - 1);
+    if (traj && traj.length > 0) return traj[Math.min(i, traj.length - 1)].t * dt;
+    if (hourAtIndex) return hourAtIndex(i);
+    return i * dt;
+  };
   if (!zoom.isZoomed) {
     return (
       <span className="text-[10px] font-mono text-[color:var(--text-faint)]"
@@ -99,13 +108,11 @@ export function ZoomBadge({ zoom, dataLength, dt, traj, epochUtcMs }: {
       </span>
     );
   }
-  const a = traj[Math.min(zoom.range.start, traj.length - 1)];
-  const b = traj[Math.min(zoom.range.end,   traj.length - 1)];
   const span = (zoom.range.end - zoom.range.start + 1) * dt;
   return (
     <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <span className="text-[10px] font-mono" style={{ color: 'var(--accent-teal)' }}>
-        zoom {tsLabel(a.t * dt, dt < 1, epochUtcMs)} → {tsLabel(b.t * dt, dt < 1, epochUtcMs)} · {span.toFixed(1)}h
+        zoom {tsLabel(hour(zoom.range.start), dt < 1, epochUtcMs)} → {tsLabel(hour(zoom.range.end), dt < 1, epochUtcMs)} · {span.toFixed(1)}h
       </span>
       <button onClick={zoom.reset}
               style={{ padding: '2px 8px', border: '1px solid var(--border)',

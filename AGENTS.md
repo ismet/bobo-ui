@@ -114,7 +114,7 @@ Result charts use **`appliedResult`** trajectory values. Shared UX: `useZoom` (R
 | Component | Data / notes |
 |---|---|
 | **MarketOverview** | Input series stats (not trajectory): price avg/median/P05/P95, wind mean/peak, mean/peak % |
-| **ChartsPanel** | Area wind MW + line price €/MWh; all trajectory hours; brush zoom |
+| **ChartsPanel** | Area wind MW + line price €/MWh; shows loaded `customData` before optimize, then `appliedResult.pricePeriod` / `windPeriod` when committed; brush zoom |
 | **DispatchChart** | SOC line + stacked charge/discharge bars; zero reference |
 | **BatteryVsPriceChart** | Charge/discharge bars + price line + average price reference |
 | **UpliftChart** | Cumulative `revenue`, `windOnlyRevenue`, uplift area |

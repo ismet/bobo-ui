@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import {
   Area, Bar, BarChart, Brush, CartesianGrid, ComposedChart, Line,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -216,16 +216,27 @@ export const KPIRow = memo(({ result }: { result: OptimizationRunResult }) => {
 });
 
 // ---- CHART 1: Price + generation overlay ----
-export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) => {
-  const { traj, dt } = result;
-  const maxPts = 800;
-  // Plot every trajectory point — values match the operation table row-for-row.
-  const data = useMemo(() => plotAll(traj.map(r => ({
-    t: r.t, price: r.price, wind: r.wind
-  }))), [traj]);
+export type SpotWindChartProps = {
+  price: number[];
+  wind: number[];
+  dt: number;
+  chartEpochUtcMs?: number;
+};
+
+export const ChartsPanel = memo(({ price, wind, dt, chartEpochUtcMs }: SpotWindChartProps) => {
+  const n = price.length;
+  const data = useMemo(
+    () => plotAll(price.map((p, i) => ({ t: i, price: p, wind: wind[i]! }))),
+    [price, wind],
+  );
   const showTime = dt < 1;
   const zoom = useZoom(data.length);
   const iso = useIsolation();
+  const hourAt = useCallback((i: number) => Math.min(Number(i), n - 1) * dt, [n, dt]);
+  const tsAt = useCallback(
+    (i: number, withTime = showTime) => tsLabel(hourAt(i), withTime, chartEpochUtcMs),
+    [hourAt, showTime, chartEpochUtcMs],
+  );
 
   return (
     <div className="card p-5 mb-6">
@@ -234,7 +245,7 @@ export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) 
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Plant &amp; market inputs</div>
           <div className="font-display text-lg">
             Spot price &amp; plant generation
-            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} epochUtcMs={result.chartEpochUtcMs} />
+            <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} hourAtIndex={hourAt} epochUtcMs={chartEpochUtcMs} />
           </div>
         </div>
         <div className="flex gap-3 text-[11px] font-mono text-[color:var(--text-dim)]">
@@ -248,13 +259,13 @@ export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) 
         <ResponsiveContainer>
           <ComposedChart key={zoom.resetKey} data={data} margin={{ top: 5, right: 16, left: -8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false}/>
-            <XAxis dataKey="idx" tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}
+            <XAxis dataKey="idx" tickFormatter={i => tsAt(Number(i))}
                    minTickGap={60} stroke="var(--text-faint)"/>
             <YAxis yAxisId="left" stroke="var(--text-faint)" width={44}
                    label={{ value: '€/MWh', angle: -90, position: 'insideLeft', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
             <YAxis yAxisId="right" orientation="right" stroke="var(--text-faint)" width={44}
                    label={{ value: 'MW', angle: 90, position: 'insideRight', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
-            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
+            <Tooltip content={<Tip labelFormatter={i => tsAt(Number(i))}/>}/>
             <Area yAxisId="right" type="monotone" dataKey="wind" name="generation" hide={!iso.active('wind')}
                   fill="var(--accent-amber)" fillOpacity={0.25} stroke="var(--accent-amber)" strokeWidth={1.2}/>
             <Line yAxisId="left" type="monotone" dataKey="price" name="price" hide={!iso.active('price')}
@@ -262,7 +273,7 @@ export const ChartsPanel = memo(({ result }: { result: OptimizationRunResult }) 
             <Brush dataKey="idx" height={26} stroke="var(--accent-teal)"
                    fill="var(--bg)" travellerWidth={8}
                    onChange={zoom.onChange}
-                   tickFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, false, result.chartEpochUtcMs)}/>
+                   tickFormatter={i => tsAt(Number(i), false)}/>
           </ComposedChart>
         </ResponsiveContainer>
       </div>

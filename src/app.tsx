@@ -398,6 +398,26 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const horizonHours = availableHours;
   const horizonSteps = availableSteps;
 
+  const spotWindChartProps = useMemo(() => {
+    if (customData && (appliedResult == null || hasPendingChanges)) {
+      return {
+        price: customData.price,
+        wind: customData.wind,
+        dt,
+        chartEpochUtcMs: selectedPlantId ? ymdToUtcMidnightMs(boboStartDate) : undefined,
+      };
+    }
+    if (appliedResult) {
+      return {
+        price: appliedResult.pricePeriod,
+        wind: appliedResult.windPeriod,
+        dt: appliedResult.dt,
+        chartEpochUtcMs: appliedResult.chartEpochUtcMs,
+      };
+    }
+    return null;
+  }, [customData, appliedResult, hasPendingChanges, dt, selectedPlantId, boboStartDate]);
+
   const optimize = useCallback(async (): Promise<OptimizationRunResult | null> => {
     if (running) return null;
     // Snapshot draft at click-time (no partial updates).
@@ -834,8 +854,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                   : customData
                     ? 'Press Optimize to run dispatch.'
                     : 'Load price & generation data, then optimize.'} />
+              {spotWindChartProps && <ChartsPanel {...spotWindChartProps} />}
               {appliedResult && <KPIRow result={appliedResult} />}
-              {appliedResult && <ChartsPanel result={appliedResult} />}
               {appliedResult && <PvGenerationCompareChart result={appliedResult} />}
               {appliedResult && (
                 <>
