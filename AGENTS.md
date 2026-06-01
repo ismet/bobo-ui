@@ -165,7 +165,7 @@ Active series: `customData` only (null until loaded).
 
 | Source | How |
 |---|---|
-| **EPİAŞ plant** | Combobox + date range (max end = **yesterday**); **Load EPİAŞ data** fetches series then **auto-runs** `optimize()` |
+| **EPİAŞ plant** | Combobox + date range (max end = **yesterday**); **Load EPİAŞ data** fetches series; user runs **Optimize dispatch** (same as paste/upload) |
 | **Paste** | Tab under “load price & generation series”; `parsePaste()` — min **24** rows |
 | **File upload** | CSV/JSON/TSV via `FileUploadPanel` |
 

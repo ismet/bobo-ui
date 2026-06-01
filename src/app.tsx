@@ -398,10 +398,10 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const horizonHours = availableHours;
   const horizonSteps = availableSteps;
 
-  const optimize = useCallback(async (seriesOverride?: SeriesData | null): Promise<OptimizationRunResult | null> => {
+  const optimize = useCallback(async (): Promise<OptimizationRunResult | null> => {
     if (running) return null;
-    // Snapshot draft at click-time (no partial updates). Override avoids stale React state right after plant fetch.
-    const snapCustomData = seriesOverride !== undefined ? seriesOverride : customData;
+    // Snapshot draft at click-time (no partial updates).
+    const snapCustomData = customData;
     const snapSelectedPlantId = selectedPlantId;
     const snapBoboStartDate = boboStartDate;
     const snapBoboEndDate = boboEndDate;
@@ -588,9 +588,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       setBoboSeriesError('Date range cannot include today or future dates.');
       return;
     }
-    const loaded = await fetchPlantSeries(selectedPlantId, boboStartDate, boboEndDate);
-    if (loaded) await optimize(loaded);
-  }, [seriesLoading, selectedPlantId, boboStartDate, boboEndDate, fetchPlantSeries, optimize]);
+    await fetchPlantSeries(selectedPlantId, boboStartDate, boboEndDate);
+  }, [seriesLoading, selectedPlantId, boboStartDate, boboEndDate, fetchPlantSeries]);
 
   return (
     <div className="min-h-screen">
