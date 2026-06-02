@@ -136,6 +136,13 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   /** Bumped only after a successful optimize commit; drives deferred overlay dismiss after charts paint. */
   const [optimizeOverlayDismissTick, setOptimizeOverlayDismissTick] = useState(0);
   const [err, setErr] = useState<string | null>(null);
+  /**
+   * Dispatch result for the financially optimal sweep point. Set by
+   * CapacitySweepChart when a sweep completes; cleared whenever the input
+   * data or sidebar parameters change (so the OutputTable reverts to
+   * appliedResult and downstream views never show a stale optimum).
+   */
+  const [sweepOptimalResult, setSweepOptimalResult] = useState<OptimizationRunResult | null>(null);
 
   const appliedCrf = useMemo(() => {
     const iPct = appliedInterestRatePct ?? interestRatePct;
@@ -288,6 +295,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     setAppliedLifetimeYears(null);
     setAppliedYearOneFadePct(null);
     setAppliedLongTermFadePct(null);
+    setSweepOptimalResult(null);
   }, []);
 
   const setCustomDataWithSource = useCallback((data: SeriesData | null, fromBobo = false) => {
@@ -544,6 +552,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       setAppliedYearOneFadePct(snapYearOneFadePct);
       setAppliedLongTermFadePct(snapLongTermFadePct);
       setAppliedResult(applied);
+      // New optimize commit invalidates any cached sweep optimum.
+      setSweepOptimalResult(null);
       result = applied;
       completedOk = true;
       setOptimizeOverlayDismissTick(t => t + 1);
@@ -884,6 +894,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     baseParams={appliedResult.params}
                     dt={appliedResult.dt}
                     runOptimizeBeforeSweep={runOptimizeBeforeSizingSweep}
+                    onSweepComplete={setSweepOptimalResult}
                     batteryCostPerKWh={appliedBatteryCostPerKWh ?? batteryCostPerKWh}
                     crf={appliedCrf}
                     interestRatePct={appliedInterestRatePct ?? interestRatePct}
@@ -897,7 +908,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     title="Hour-by-hour operation table"
                     kicker="Physical dispatch, throughput, and revenue by interval—export for customer studies, warranty models, or integration specs."
                   />
-                  <OutputTable result={appliedResult} />
+                  <OutputTable result={appliedResult} sweepResult={sweepOptimalResult} />
 
                   {/* <div className="my-10"></div>
                   <SectionHeader eyebrow="09 · notes"

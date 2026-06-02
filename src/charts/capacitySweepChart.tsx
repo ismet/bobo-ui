@@ -93,7 +93,8 @@ type SweepResults = { points: SweepPoint[]; scalePower: boolean; inputKey: strin
 export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
   yearOneFadePct, longTermFadePct,
-  runOptimizeBeforeSweep }: {
+  runOptimizeBeforeSweep,
+  onSweepComplete }: {
     basePrice: number[];
     baseWind: number[];
     baseParams: OptimizationParams;
@@ -106,6 +107,13 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     longTermFadePct: number;
     /** When set, clicking "Run sizing sweep" runs full dispatch optimization first, then the sweep. */
     runOptimizeBeforeSweep?: () => Promise<OptimizationRunResult | null>;
+    /**
+     * Fires once the sweep finishes (or is cleared). Receives the dispatch
+     * result bundle for the financially optimal sweep point, or null when no
+     * profitable optimum exists. Used to anchor downstream tables/charts to
+     * the optimal battery size.
+     */
+    onSweepComplete?: (result: OptimizationRunResult | null) => void;
   }) => {
   const [results, setResults] = useState<SweepResults | null>(null);
   const [running, setRunning] = useState(false);
@@ -127,8 +135,14 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   );
 
   useEffect(() => {
-    setResults(prev => (prev && prev.inputKey !== currentInputKey ? null : prev));
-  }, [currentInputKey]);
+    setResults(prev => {
+      if (prev && prev.inputKey !== currentInputKey) {
+        onSweepComplete?.(null);
+        return null;
+      }
+      return prev;
+    });
+  }, [currentInputKey, onSweepComplete]);
 
   const runSweep = useCallback(async (fresh?: OptimizationRunResult | null) => {
     const bp = fresh?.pricePeriod ?? basePrice;
@@ -146,6 +160,11 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       if (sweepGenRef.current !== gen) return;
 
       const out: SweepPoint[] = [];
+      // Retain the trajectory produced at each non-zero sweep point. The
+      // optimum is only known after the loop + marginal-value pass, so we
+      // keep all of them and pick the matching one when building the
+      // callback payload. Max pointCount is 20 → bounded memory.
+      const trajByCap = new Map<number, Trajectory>();
       // Use the same plant-only baseline as the optimiser so the current-size
       // sweep point matches the KPI uplift exactly.
       const baseRevenue = plantOnlyRevenue(bp, bw, bpars, sweepDt);
@@ -168,6 +187,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           const { traj } = await runOptimizationDelegated(bp, bw, params);
           if (sweepGenRef.current !== gen) return;
           totalRev = sweepTrajTotalRevenue(traj);
+          trajByCap.set(cap, traj);
         }
         out.push({
           capacity: cap,
@@ -194,12 +214,62 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       }
 
       setResults({ points: out, scalePower, inputKey, periodToAnnual });
+
+      // Build the optimal-size dispatch bundle for the callback. The optimum
+      // is the sweep point with the highest positive net annual benefit; if
+      // none qualifies we hand back null so downstream views can revert to
+      // the applied (sidebar-size) result.
+      let optimalResult: OptimizationRunResult | null = null;
+      let bestNet = -Infinity;
+      let bestIdx = -1;
+      for (let i = 1; i < out.length; i++) {
+        const cap = out[i]!.capacity;
+        // CAPEX-aware net: same formula as the finance layer below.
+        const yearOneUplift = out[i]!.uplift * periodToAnnual;
+        const capex = cap * 1000 * batteryCostPerKWh;
+        const netAnnual = (yearOneUplift * crf) - (capex * crf);
+        if (netAnnual > bestNet) { bestNet = netAnnual; bestIdx = i; }
+      }
+      if (bestIdx > 0 && bestNet > 0) {
+        const optCap = out[bestIdx]!.capacity;
+        const optTraj = trajByCap.get(optCap);
+        if (optTraj) {
+          const optCMax = scalePower ? optCap * (bpars.chargeMax / bpars.capacity)
+            : bpars.chargeMax;
+          const optDMax = scalePower ? optCap * (bpars.dischargeMax / bpars.capacity)
+            : bpars.dischargeMax;
+          const optParams: OptimizationParams = {
+            ...bpars,
+            capacity: optCap,
+            chargeMax: optCMax,
+            dischargeMax: optDMax,
+          };
+          optimalResult = {
+            traj: optTraj,
+            params: optParams,
+            pricePeriod: bp,
+            windPeriod: bw,
+            spotWindRescaleKey: fresh?.spotWindRescaleKey ?? '',
+            ms: 0,
+            ipcOverheadMs: 0,
+            usedWorker: false,
+            dateRangeLabel: fresh?.dateRangeLabel ?? '',
+            chartEpochUtcMs: fresh?.chartEpochUtcMs,
+            dt: sweepDt,
+            windPeriodMeasured: fresh?.windPeriodMeasured,
+            pvReconstructStats: fresh?.pvReconstructStats,
+            horizonTrim: fresh?.horizonTrim,
+          };
+        }
+      }
+      onSweepComplete?.(optimalResult);
     } catch (e) {
       if (sweepGenRef.current === gen) console.error('Sweep failed:', e);
+      onSweepComplete?.(null);
     } finally {
       if (sweepGenRef.current === gen) setRunning(false);
     }
-  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower]);
+  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower, batteryCostPerKWh, crf, onSweepComplete]);
 
   const onRunSizingSweep = useCallback(async () => {
     if (runOptimizeBeforeSweep) {
@@ -280,12 +350,20 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     return best;
   }, [results]);
 
-  // Anchor point for the lifetime breakdown panel: the sweep point closest to
-  // the user's current battery size (sidebar value). Showing the breakdown for
-  // a sweep point keeps the math reproducible — every number on the breakdown
-  // appears verbatim somewhere in financePoints.
+  // Anchor point for the lifetime breakdown panel.
+  // Default = the financially optimal sweep point (netOptimum), so the NPV
+  // table and related graphs are organized around the optimal battery size.
+  // Fallback = the sweep point closest to the user's current sidebar size
+  // when no profitable optimum exists in the swept range.
+  // A small toggle (breakdownAnchorMode) lets the user flip back to the
+  // current-size view even when an optimum is present.
+  const [breakdownAnchorMode, setBreakdownAnchorMode] = useState<'optimal' | 'current'>('optimal');
   const breakdownAnchor = useMemo(() => {
     if (!financePoints) return null;
+    const useOptimal = breakdownAnchorMode === 'optimal' && netOptimum;
+    if (useOptimal) {
+      return financePoints.find(p => Math.abs(p.capacity - netOptimum.capacity) < 1e-9) ?? netOptimum;
+    }
     const target = baseParams.capacity;
     let best = financePoints[0];
     let bestDist = Math.abs(best.capacity - target);
@@ -294,7 +372,10 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       if (d < bestDist) { best = p; bestDist = d; }
     }
     return best;
-  }, [financePoints, baseParams.capacity]);
+  }, [financePoints, baseParams.capacity, netOptimum, breakdownAnchorMode]);
+  const breakdownIsOptimal = !!(netOptimum && breakdownAnchorMode === 'optimal'
+    && breakdownAnchor
+    && Math.abs(breakdownAnchor.capacity - netOptimum.capacity) < 1e-9);
 
   // Build the year-by-year breakdown table for the anchor point. Done outside
   // the render so it can be reused (table + downloadable CSV if needed later).
@@ -829,9 +910,56 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           {/* ====================================================== */}
           {breakdownAnchor && breakdownRows && (
             <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
-              <div className="mb-4">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Lifetime cash bridge</div>
-                <div className="font-display text-lg">Fade &amp; discount ({breakdownAnchor.capacity.toFixed(1)} MWh sweep point)</div>
+              <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Lifetime cash bridge</div>
+                  <div className="font-display text-lg">
+                    Fade &amp; discount ·{' '}
+                    <span style={{ color: breakdownIsOptimal ? 'var(--accent-green)' : 'var(--text)' }}>
+                      {breakdownAnchor.capacity.toFixed(1)} MWh
+                    </span>
+                    {' '}
+                    <span className="text-xs font-mono" style={{
+                      color: breakdownIsOptimal ? 'var(--accent-green)' : 'var(--text-faint)',
+                      letterSpacing: '0.05em', textTransform: 'uppercase'
+                    }}>
+                      {breakdownIsOptimal ? '◆ optimal size' : '◆ current size'}
+                    </span>
+                  </div>
+                </div>
+                {netOptimum && (
+                  <div className="flex items-center gap-1 text-[10px] font-mono"
+                    style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 2 }}>
+                    <button
+                      onClick={() => setBreakdownAnchorMode('optimal')}
+                      style={{
+                        padding: '4px 10px', borderRadius: 3,
+                        background: breakdownAnchorMode === 'optimal' ? 'var(--accent-green)' : 'transparent',
+                        color: breakdownAnchorMode === 'optimal' ? 'var(--bg)' : 'var(--text-dim)',
+                        fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                        letterSpacing: '0.05em', textTransform: 'uppercase',
+                        cursor: 'pointer', border: 'none',
+                      }}
+                      title="Show the NPV table for the financially optimal sweep point"
+                    >
+                      optimal ({netOptimum.capacity.toFixed(0)} MWh)
+                    </button>
+                    <button
+                      onClick={() => setBreakdownAnchorMode('current')}
+                      style={{
+                        padding: '4px 10px', borderRadius: 3,
+                        background: breakdownAnchorMode === 'current' ? 'var(--surface-2)' : 'transparent',
+                        color: breakdownAnchorMode === 'current' ? 'var(--text)' : 'var(--text-dim)',
+                        fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                        letterSpacing: '0.05em', textTransform: 'uppercase',
+                        cursor: 'pointer', border: 'none',
+                      }}
+                      title="Show the NPV table for the sweep point closest to the current sidebar capacity"
+                    >
+                      current ({baseParams.capacity.toFixed(0)} MWh)
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* ---- The fade-curve chart proper ---- */}

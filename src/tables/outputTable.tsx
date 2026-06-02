@@ -179,9 +179,24 @@ const pageBtnStyle = (disabled: boolean) => ({
   cursor: disabled ? 'not-allowed' : 'pointer'
 });
 
-export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) => {
-  const operationCols = useMemo(() => operationColsFor(result), [result]);
-  const rows = useMemo(() => buildOperationTable(result), [result]);
+export const OutputTable = memo(({ result, sweepResult }: {
+  result: OptimizationRunResult;
+  /**
+   * When provided, the table is built from this dispatch instead of
+   * `result` — typically the financially optimal sweep point, so the
+   * downloadable hour-by-hour table is organized around the optimal
+   * battery size. The original sidebar-size dispatch is still available
+   * as `result` for the title-bar / system-design banner context.
+   */
+  sweepResult?: OptimizationRunResult | null;
+}) => {
+  // Effective result drives all table data. When the sweep provides a
+  // non-null optimal-size dispatch we use that; otherwise we fall back to
+  // the latest applied (sidebar-size) optimize commit.
+  const effective = sweepResult ?? result;
+  const onOptimal = !!sweepResult;
+  const operationCols = useMemo(() => operationColsFor(effective), [effective]);
+  const rows = useMemo(() => buildOperationTable(effective), [effective]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [copyMsg, setCopyMsg] = useState('');
@@ -191,7 +206,8 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
 
   const handleDownload = () => {
     const csv = rowsToCSV(rows, operationCols);
-    downloadCSV(`res_operation_table_${rows.length}rows.csv`, csv);
+    const stem = onOptimal ? 'res_operation_table_optimal' : 'res_operation_table';
+    downloadCSV(`${stem}_${rows.length}rows.csv`, csv);
   };
 
   const handleCopyAll = async () => {
@@ -229,14 +245,16 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
   };
 
   // Pull the parameters that produced this table — these come straight from the
-  // System Design panel, so the user can see the inputs alongside the outputs.
-  const p = result.params || {};
-  const gridLimitMw = result.traj?._gridLimit ?? Math.max(p.chargeMax ?? 0, p.dischargeMax ?? 0);
-  const curtailedHours  = result.traj?._curtailedHours  ?? 0;
-  const curtailedEnergy = result.traj?._curtailedEnergy ?? 0;
-  const pvRecon = result.pvReconstructStats;
+  // System Design panel (or, when the sweep is in effect, from the optimal
+  // sweep point), so the user can see the inputs alongside the outputs.
+  const p = effective.params || {};
+  const gridLimitMw = effective.traj?._gridLimit ?? Math.max(p.chargeMax ?? 0, p.dischargeMax ?? 0);
+  const curtailedHours  = effective.traj?._curtailedHours  ?? 0;
+  const curtailedEnergy = effective.traj?._curtailedEnergy ?? 0;
+  const pvRecon = effective.pvReconstructStats;
   const designChips = [
-    { k: 'Capacity',            v: `${p.capacity ?? '?'} MWh` },
+    { k: 'Capacity',            v: `${p.capacity ?? '?'} MWh${onOptimal ? ' · optimal' : ''}`,
+      hi: onOptimal },
     { k: 'Max charge',          v: `${p.chargeMax ?? '?'} MW` },
     { k: 'Max discharge',       v: `${p.dischargeMax ?? '?'} MW` },
     { k: 'Connection limit',    v: `± ${gridLimitMw} MW`, hi: true },
@@ -254,9 +272,23 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Dispatch export</div>
-          <div className="font-display text-lg">Hour-by-hour plant &amp; BESS operation</div>
+          <div className="font-display text-lg">
+            Hour-by-hour plant &amp; BESS operation
+            {onOptimal && (
+              <span className="ml-2 text-xs font-mono" style={{
+                color: 'var(--accent-green)',
+                letterSpacing: '0.05em', textTransform: 'uppercase',
+                verticalAlign: 'middle',
+              }}>
+                ◆ at optimal size
+              </span>
+            )}
+          </div>
           <div className="text-xs text-[color:var(--text-dim)] mt-1">
-            {rows.length.toLocaleString()} intervals · throughput &amp; revenue columns · matches dispatch run inputs
+            {rows.length.toLocaleString()} intervals · throughput &amp; revenue columns
+            {onOptimal
+              ? ` · optimal size ${(effective.params.capacity ?? 0).toFixed(1)} MWh from sizing sweep`
+              : ' · matches dispatch run inputs'}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -275,12 +307,16 @@ export const OutputTable = memo(({ result }: { result: OptimizationRunResult }) 
 
       {/* System design banner — surfaces the parameters that produced the table */}
       <div style={{
-        border: '1px solid var(--border)', borderRadius: 4,
+        border: onOptimal ? '1px solid var(--accent-green)' : '1px solid var(--border)',
+        borderRadius: 4,
         padding: '10px 12px', marginBottom: 14,
         background: 'var(--bg)'
       }}>
-        <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-2">
-          System design parameters used for this run
+        <div className="text-[10px] uppercase tracking-[0.15em] font-mono mb-2"
+          style={{ color: onOptimal ? 'var(--accent-green)' : 'var(--text-faint)' }}>
+          {onOptimal
+            ? `System design parameters for optimal size (${(effective.params.capacity ?? 0).toFixed(1)} MWh from sizing sweep)`
+            : 'System design parameters used for this run'}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
           {designChips.map(c => (
