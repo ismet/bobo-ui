@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { fmtMoney, fmtNumber } from '../formatUtils';
+import { fingerprintSeriesSample, fmtMoney, fmtNumber } from '../formatUtils';
 import { buildFadeCurve } from '../panels/economicsDegradation';
 import { FullScreenJobOverlay } from '../fullScreenJobOverlay';
 import { runOptimizationDelegated } from '../engine/optimizationRunner';
@@ -15,7 +15,55 @@ function buildSweepGrid(capacity: number, maxCapacityX: number, pointCount: numb
   for (let i = 0; i <= pointCount; i++) {
     grid.push((i / pointCount) * top);
   }
+  const capacityTol = Math.max(1e-9, Math.abs(capacity) * 1e-9);
+  if (capacity > 0 && !grid.some(x => Math.abs(x - capacity) <= capacityTol)) {
+    grid.push(capacity);
+    grid.sort((a, b) => a - b);
+  }
   return grid;
+}
+
+function plantOnlyRevenue(price: number[], wind: number[], params: OptimizationParams, dt: number): number {
+  const gridLimit = params.installedCapacityMW != null && params.installedCapacityMW > 0
+    ? params.installedCapacityMW
+    : Math.max(params.chargeMax, params.dischargeMax);
+  const capE = gridLimit * dt;
+  let total = 0;
+  for (let t = 0; t < price.length; t++) {
+    total += Math.min(wind[t]! * dt, capE) * price[t]!;
+  }
+  return total;
+}
+
+function makeSweepInputKey(
+  price: number[],
+  wind: number[],
+  params: OptimizationParams,
+  dt: number,
+  maxCapacityX: number,
+  pointCount: number,
+  scalePower: boolean,
+): string {
+  return [
+    price.length,
+    wind.length,
+    fingerprintSeriesSample(price, wind),
+    dt,
+    params.capacity,
+    params.chargeMax,
+    params.dischargeMax,
+    params.chargeEff,
+    params.dischargeEff,
+    params.initialSOCFrac,
+    params.socSteps,
+    params.targetDsoc ?? 'auto',
+    params.chargeFromGrid === false ? 'plant-only' : 'grid-ok',
+    params.wearCost ?? 0,
+    params.installedCapacityMW ?? 'fallback-grid-limit',
+    maxCapacityX,
+    pointCount,
+    scalePower ? 'scale-power' : 'fixed-power',
+  ].join('|');
 }
 
 // ============================================================================
@@ -40,7 +88,7 @@ type SweepPoint = {
   marginalEurPerMWh: number;
 };
 
-type SweepResults = { points: SweepPoint[]; scalePower: boolean };
+type SweepResults = { points: SweepPoint[]; scalePower: boolean; inputKey: string; periodToAnnual: number };
 
 export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
@@ -69,9 +117,18 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
 
   useEffect(() => () => { sweepGenRef.current++; }, []);
 
-  // Hours per period & annualisation factor for revenue extrapolation
-  const periodHours = basePrice.length * dt;
-  const periodToAnnual = 8760 / Math.max(1, periodHours);
+  const currentInputKey = useMemo(
+    () => makeSweepInputKey(basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower),
+    [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower],
+  );
+  const currentSweepPointCount = useMemo(
+    () => buildSweepGrid(baseParams.capacity, maxCapacityX, pointCount).length,
+    [baseParams.capacity, maxCapacityX, pointCount],
+  );
+
+  useEffect(() => {
+    setResults(prev => (prev && prev.inputKey !== currentInputKey ? null : prev));
+  }, [currentInputKey]);
 
   const runSweep = useCallback(async (fresh?: OptimizationRunResult | null) => {
     const bp = fresh?.pricePeriod ?? basePrice;
@@ -79,6 +136,8 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     const bpars = fresh?.params ?? baseParams;
     const sweepDt = fresh?.dt ?? dt;
     const grid = buildSweepGrid(bpars.capacity, maxCapacityX, pointCount);
+    const inputKey = makeSweepInputKey(bp, bw, bpars, sweepDt, maxCapacityX, pointCount, scalePower);
+    const periodToAnnual = 8760 / Math.max(1, bp.length * sweepDt);
 
     const gen = ++sweepGenRef.current;
     setRunning(true); setProgress(0); setResults(null);
@@ -87,11 +146,9 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       if (sweepGenRef.current !== gen) return;
 
       const out: SweepPoint[] = [];
-      // Always include a true 0-MWh baseline first (generation only) — analytic, no DP needed.
-      let baseRevenue = 0;
-      for (let t = 0; t < bp.length; t++) {
-        baseRevenue += bw[t] * sweepDt * bp[t];
-      }
+      // Use the same plant-only baseline as the optimiser so the current-size
+      // sweep point matches the KPI uplift exactly.
+      const baseRevenue = plantOnlyRevenue(bp, bw, bpars, sweepDt);
 
       for (let i = 0; i < grid.length; i++) {
         if (sweepGenRef.current !== gen) return;
@@ -136,7 +193,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
         }
       }
 
-      setResults({ points: out, scalePower });
+      setResults({ points: out, scalePower, inputKey, periodToAnnual });
     } catch (e) {
       if (sweepGenRef.current === gen) console.error('Sweep failed:', e);
     } finally {
@@ -178,8 +235,8 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     return results.points.map(p => {
       // Year-1 uplift, extrapolated from the simulated horizon.
       // (With Option A active, p.uplift is already net of wear cost.)
-      const annualRevenue = p.revenue * periodToAnnual;
-      const yearOneUplift = p.uplift * periodToAnnual;
+      const annualRevenue = p.revenue * results.periodToAnnual;
+      const yearOneUplift = p.uplift * results.periodToAnnual;
       // Levelised annual uplift over the lifetime, with capacity fade & NPV.
       const annualUplift = yearOneUplift * fadeNpvFactor;
       // CAPEX in € (cost is in €/kWh, capacity in MWh)
@@ -194,7 +251,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
         capex, annualCapex, netAnnual, simplePayback,
       };
     });
-  }, [results, periodToAnnual, batteryCostPerKWh, crf, fadeNpvFactor]);
+  }, [results, batteryCostPerKWh, crf, fadeNpvFactor]);
 
   // Optimal capacity = where net annual benefit peaks. This is the
   // financially meaningful sizing answer (different from sweetSpot which
@@ -294,7 +351,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Sizing &amp; dispatch sweep</div>
           <div className="font-display text-lg">Revenue uplift vs installed MWh</div>
           <div className="text-xs font-mono text-[color:var(--text-dim)] mt-1">
-            {pointCount + 1} points from 0 to {(baseParams.capacity * maxCapacityX).toFixed(0)} MWh
+            {currentSweepPointCount} points from 0 to {(baseParams.capacity * maxCapacityX).toFixed(0)} MWh
           </div>
         </div>
         <button onClick={() => { void onRunSizingSweep(); }} disabled={running}
@@ -348,10 +405,10 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           borderRadius: 4
         }}>
           <div className="text-sm text-[color:var(--text-dim)] mb-2">
-            Run {pointCount + 1} dispatch optimizations (by MWh size)
+            Run {currentSweepPointCount} dispatch optimizations (by MWh size)
           </div>
           <div className="text-[10px] text-[color:var(--text-faint)]">
-            Rough runtime ~{((pointCount + 1) * Math.max(0.05, (basePrice.length * dt) / 8000)).toFixed(1)}s
+            Rough runtime ~{(currentSweepPointCount * Math.max(0.05, (basePrice.length * dt) / 8000)).toFixed(1)}s
           </div>
         </div>
       )}
