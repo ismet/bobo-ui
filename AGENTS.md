@@ -113,7 +113,7 @@ retention[y] = max(0, 1 − Σ_{k=1..y} fade_rate(k) / 100)
 - **CAPEX** [€] = `batteryCostPerKWh × capacity [MWh] × 1000`.
 - **Annualised cost** = CAPEX × CRF.
 - **Benchmark wear** (display only): `CAPEX / (6000 × capacity × 2 × 0.9)` €/MWh (`6000` equivalent full cycles, 0.9 round-trip eff).
-- **Sidebar defaults**: `batteryCostPerKWh = 90 €/kWh`, `interestRatePct = 9.5 %`, `lifetimeYears = 20 yr`. The applied snapshot is committed on each successful optimize (`appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`); the sweep finance layer uses `applied ? applied : draft`.
+- **Sidebar defaults**: `batteryCostPerKWh = 155 €/kWh`, `interestRatePct = 9.5 %`, `lifetimeYears = 20 yr`. The applied snapshot is committed on each successful optimize (`appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`); the sweep finance layer uses `applied ? applied : draft`.
 
 ## KPI calculations (per optimized run)
 

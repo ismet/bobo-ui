@@ -86,7 +86,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   // ---- Financial parameters --------------------------------------------------
   // Battery cost: € per kWh of energy capacity (industry-standard quoting).
   //   2024 typical Li-ion utility-scale cost: ~250–350 €/kWh (BNEF, NREL).
-  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(90); // €/kWh (draft)
+  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(155); // €/kWh (draft)
   const [interestRatePct, setInterestRatePct] = useState(9.5); // % (draft)
   const [lifetimeYears, setLifetimeYears] = useState(20);  // years (draft)
 
