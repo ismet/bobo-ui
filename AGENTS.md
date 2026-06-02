@@ -17,10 +17,10 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
 
 ## Tooling & verification
 
-- **Typecheck** (no npm script): `npx tsc --noEmit -p tsconfig.json` covers `src/` + `scripts/`; `npx tsc --noEmit -p tsconfig.node.json` covers `vite.config.ts` and `scripts/**/*.ts`. Both configs are `strict`, `noEmit`.
-- **Smoke test**: `node scripts/verify-ui.mjs` — Playwright script, not in `package.json`. Needs `playwright` installed separately and a dev/preview server on `127.0.0.1:5173`. Hits `/api/power-plants`, then drives paste → PV ON → optimize, asserts horizon trim + KPI visibility + interval count.
+- **Typecheck** (no npm script): `npx tsc --noEmit -p tsconfig.json` covers `src/` + `scripts/`; `npx tsc --noEmit -p tsconfig.node.json` covers `vite.config.ts` and `scripts/**/*.ts`. Both configs are `strict`, `noEmit`. Run both before claiming a change compiles.
+- **Smoke test**: `node scripts/verify-ui.mjs` — Playwright script, not in `package.json`. Needs `playwright` installed separately and a dev/preview server on `127.0.0.1:5173`. Hits `/api/power-plants`, then drives paste → PV ON → optimize, asserts horizon trim + KPI visibility + interval count. Expects exactly **1416 intervals** from 1422 input hours with PV on (6 dropped to make 59 full days).
 - **No CI, no pre-commit hooks, no husky.** No `.github/` directory. Don't expect a status check on PRs.
-- **Primary search tool**: Augment Context Engine MCP (`mcp_augment-context-engine_codebase-retrieval`) — see `.cursor/rules/augment-context-engine.mdc`. Always pass `directory_path=/home/ismet/dev/bobo-ui`. Use `Read` for known paths, `Grep` for exact symbols, never shell `find`/`rg` to discover behavior.
+- **Search workflow**: use the Augment Context Engine MCP (see `.cursor/rules/augment-context-engine.mdc` for the full protocol — pre-edit batched query, `Read` after, `Grep` only for known symbols). Don't `cd`/`find`/`rg` to discover behavior.
 
 ## Source layout
 
@@ -56,6 +56,7 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
   - **Idle timeout 10 min** (`IDLE_TIMEOUT_MS = 10 × 60 × 1000`). Activity tracked on `mousedown / keydown / scroll / touchstart` + `visibilitychange`; re-checked every 30 s.
   - `App` accepts optional `onLogout?: () => void`; `Header` shows a "Log out" chip when provided.
   - When `VITE_AUTH_USERS` is missing/empty, the login screen surfaces a "not configured" error.
+  - **localStorage keys** (in `src/auth.ts`): `bobo-ui-auth` = `'1'` when logged in; `bobo-ui-auth-at` = last-activity ms (epoch). `touchActivity()` is throttled to 1 s. Manipulate via the auth helpers, not by writing these keys directly.
 - **DP engine**: Pure TS in `runOptimization.ts`. Browser runs via `runOptimizationDelegated()` → `optimizationWorker.ts`. Falls back to sync `runOptimization()` when `Worker` is unavailable or the page is served on **`file://`**.
 - **Remote API** (no local backend): `https://bobo-api.onrender.com`
   - Browser base URL: `boboApiUrl()` in `src/data/api.ts` → `BOBO_API_BASE`
@@ -204,10 +205,6 @@ The "**Load EPİAŞ data**" button is gated on the `hasUnappliedChanges` flag (s
 - Render service name (`bobo-ui` in `render.yaml`) differs from `package.json` name (`epias-frontend`).
 - ESM (`"type": "module"`). Node scripts use `tsx`.
 - `tsconfig.json`: `noEmit: true`, `"include": ["src", "scripts"]`. `tsconfig.node.json`: `vite.config.ts` + `scripts/**/*.ts`.
-- `fmtMoney()` / `fmtNumber()`: `€` prefix on money; `k` / `M` suffixes; no thousands separators.
-- `plotAll()` adds `idx` for Recharts X-axis.
-- `fingerprintSeriesSample()`: hashes first, middle, last `(price, wind)` pairs for stable scenario keys.
 - `dt` is fixed **1.0 h** per row in `app.tsx`.
 - Optimization overlay dismissal is deferred after a successful commit: two `requestAnimationFrame`s, then `requestIdleCallback` (2 s timeout) or `setTimeout(200)`, then a 500 ms hold, so charts paint before the overlay closes.
-- **localStorage auth keys** (in `src/auth.ts`): `bobo-ui-auth` = `'1'` when logged in; `bobo-ui-auth-at` = last-activity ms (epoch). `touchActivity()` is throttled to 1 s. Touching these keys directly is usually a smell — extend `auth.ts` instead.
 - **Node engine** `>=20 <23` per `package.json` `engines`. Render's static-site runtime mirrors this; bumping requires checking Render's available Node versions first.
