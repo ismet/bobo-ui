@@ -38,7 +38,7 @@ const PV_GENERATION_COLS = [
 
 function operationColsFor(result: OptimizationRunResult): string[] {
   if (!result.windPeriodMeasured) return [...BASE_OPERATION_COLS];
-  const cols = [...BASE_OPERATION_COLS];
+  const cols: string[] = [...BASE_OPERATION_COLS];
   const idx = cols.indexOf('uncontrolled_power');
   cols.splice(idx + 1, 0, ...PV_GENERATION_COLS);
   return cols;

@@ -85,7 +85,6 @@ type SweepPoint = {
   baseline: number;
   uplift: number;
   upliftPct: number;
-  marginalEurPerMWh: number;
 };
 
 type SweepResults = { points: SweepPoint[]; scalePower: boolean; inputKey: string; periodToAnnual: number };
@@ -195,23 +194,13 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           baseline: baseRevenue,
           uplift: totalRev - baseRevenue,
           upliftPct: baseRevenue > 0 ? ((totalRev - baseRevenue) / baseRevenue) * 100 : 0,
-          marginalEurPerMWh: 0,
         });
         setProgress((i + 1) / grid.length);
       }
 
       if (sweepGenRef.current !== gen) return;
 
-      // Marginal value: € of additional uplift per additional MWh of capacity
-      for (let i = 0; i < out.length; i++) {
-        if (i === 0) {
-          out[i].marginalEurPerMWh = 0;
-        } else {
-          const dCap = out[i].capacity - out[i - 1].capacity;
-          const dUp = out[i].uplift - out[i - 1].uplift;
-          out[i].marginalEurPerMWh = dCap > 0 ? dUp / dCap : 0;
-        }
-      }
+
 
       setResults({ points: out, scalePower, inputKey, periodToAnnual });
 
@@ -337,19 +326,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     return best && best.netAnnual > 0 ? best : null;
   }, [financePoints]);
 
-  // Sweet spot for the gross-uplift chart: highest €-uplift per MWh installed.
-  // Different from netOptimum (which subtracts CAPEX); kept for the upper chart.
-  const sweetSpot = useMemo(() => {
-    if (!results) return null;
-    let best = null;
-    for (const p of results.points) {
-      if (p.capacity < 1e-6) continue;
-      const ratio = p.uplift / p.capacity;
-      if (!best || ratio > best.ratio) best = { ...p, ratio };
-    }
-    return best;
-  }, [results]);
-
   // Anchor point for the lifetime breakdown panel.
   // Default = the financially optimal sweep point (netOptimum), so the NPV
   // table and related graphs are organized around the optimal battery size.
@@ -400,23 +376,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     }
     return rows;
   }, [breakdownAnchor, fadeCurve, interestRatePct, lifetimeYears]);
-
-  // Detect what regime the curve is in. We compare the marginal value at the
-  // start of the sweep (first non-zero point) to the marginal at the end.
-  // - "linear":     end-marginal is within 15% of start-marginal → not saturating
-  // - "saturating": end-marginal is positive but well below start
-  // - "saturated":  end-marginal ≈ 0 or negative — adding capacity hurts
-  const regime = useMemo(() => {
-    if (!results || results.points.length < 3) return null;
-    const pts = results.points;
-    const startMarg = pts[1]!.marginalEurPerMWh;
-    const endMarg = pts[pts.length - 1]!.marginalEurPerMWh;
-    if (startMarg <= 0) return null;
-    const ratio = endMarg / startMarg;
-    if (ratio > 0.85) return { kind: 'linear', startMarg, endMarg, ratio };
-    if (ratio > 0.10) return { kind: 'saturating', startMarg, endMarg, ratio };
-    return { kind: 'saturated', startMarg, endMarg, ratio };
-  }, [results]);
 
   return (
     <>
@@ -494,215 +453,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
         </div>
       )}
 
-      {results && (
-        <>
-          {/* KPI strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-            <div className="card-flush p-4" style={{ borderRadius: 4 }}>
-              <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Generation-only baseline</div>
-              <div className="num text-lg font-display text-[color:var(--accent-amber)]">{fmtMoney(results.points[0].baseline)}</div>
-            </div>
-            <div className="card-flush p-4" style={{ borderRadius: 4 }}>
-              <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">At max capacity</div>
-              <div className="num text-lg font-display text-[color:var(--accent-teal)]">
-                {fmtMoney(results.points[results.points.length - 1].uplift)}
-              </div>
-              <div className="text-[10px] font-mono text-[color:var(--text-dim)] mt-1">
-                +{results.points[results.points.length - 1].upliftPct.toFixed(1)}% at {results.points[results.points.length - 1].capacity.toFixed(0)} MWh
-              </div>
-            </div>
-            {sweetSpot && (
-              <>
-                <div className="card-flush p-4" style={{ borderRadius: 4 }}>
-                  <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Best uplift per MWh added</div>
-                  <div className="num text-lg font-display text-[color:var(--accent-green)]">
-                    {fmtMoney(sweetSpot.ratio)}
-                  </div>
-                  <div className="text-[10px] font-mono text-[color:var(--text-dim)] mt-1">
-                    at {sweetSpot.capacity.toFixed(1)} MWh
-                  </div>
-                </div>
-                <div className="card-flush p-4" style={{ borderRadius: 4 }}>
-                  <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Last step — extra € per MWh</div>
-                  <div className="num text-lg font-display text-[color:var(--accent-violet)]">
-                    {fmtMoney(results.points[results.points.length - 1].marginalEurPerMWh)}
-                  </div>
-                  <div className="text-[10px] text-[color:var(--text-dim)] mt-1">
-                    beyond this size, each MWh adds less
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Regime-aware explainer */}
-          {regime && (
-            <div className="mb-5" style={{
-              padding: '12px 16px',
-              borderLeft: `3px solid ${regime.kind === 'saturated' ? 'var(--accent-rose)' :
-                  regime.kind === 'saturating' ? 'var(--accent-amber)' :
-                    'var(--accent-teal)'
-                }`,
-              background: 'var(--surface)', borderRadius: 4,
-            }}>
-              <div className="text-[10px] uppercase tracking-[0.15em] font-mono mb-1.5"
-                style={{
-                  color: regime.kind === 'saturated' ? 'var(--accent-rose)' :
-                    regime.kind === 'saturating' ? 'var(--accent-amber)' :
-                      'var(--accent-teal)'
-                }}>
-                {regime.kind === 'saturated' ? '◆ Flattening — extra storage adds little' :
-                  regime.kind === 'saturating' ? '◆ Diminishing returns — each MWh matters less' :
-                    '◆ Steady climb — more storage still pays'}
-              </div>
-              <div className="text-xs text-[color:var(--text-dim)]" style={{ lineHeight: 1.55 }}>
-                {regime.kind === 'linear' && (
-                  <>
-                    Extra revenue per added MWh stays high across the range (only about {((1 - regime.ratio) * 100).toFixed(0)}% softer at the top).
-                    {scalePower ? (
-                      <> Power scales with energy here, so larger plants can keep using the market.
-                        Turn off &ldquo;scale power with storage size&rdquo; to see how a fixed connection behaves.</>
-                    ) : (
-                      <> With charge and discharge limits fixed, wide price spreads can keep rewarding more storage.
-                        A longer study period may show the curve bending.</>
-                    )}
-                  </>
-                )}
-                {regime.kind === 'saturating' && (
-                  <>
-                    Each extra MWh adds less uplift than the one before (from about {fmtMoney(regime.startMarg)} to {fmtMoney(regime.endMarg)} per MWh).
-                    That is the usual investment story: compare those increments to your all-in battery cost per MWh to judge the right size.
-                  </>
-                )}
-                {regime.kind === 'saturated' && (
-                  <>
-                    At the largest sizes, another MWh barely helps
-                    {regime.endMarg < 0 ? ' and can even reduce value after losses' : ''}.
-                    The economics favour stopping near the marker where return per MWh is strongest—not simply maximising megawatt-hours.
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* The chart itself */}
-          <div style={{ width: '100%', height: 380 }}>
-            <ResponsiveContainer>
-              <ComposedChart data={results.points} margin={{ top: 5, right: 16, left: 10, bottom: 16 }}>
-                <defs>
-                  <linearGradient id="capUpliftGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent-teal)" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="var(--accent-teal)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                <XAxis type="number" dataKey="capacity"
-                  domain={[0, 'dataMax']}
-                  tickFormatter={v => `${v.toFixed(0)}`}
-                  stroke="var(--text-faint)"
-                  label={{
-                    value: 'battery capacity (MWh)', position: 'insideBottom',
-                    offset: -8, fill: 'var(--text-faint)', fontSize: 10,
-                    fontFamily: 'JetBrains Mono'
-                  }} />
-                <YAxis yAxisId="left" stroke="var(--text-faint)" width={64}
-                  tickFormatter={v => fmtMoney(v)}
-                  label={{
-                    value: 'uplift (€)', angle: -90, position: 'insideLeft',
-                    fill: 'var(--text-faint)', fontSize: 10,
-                    fontFamily: 'JetBrains Mono'
-                  }} />
-                <YAxis yAxisId="right" orientation="right" stroke="var(--text-faint)" width={50}
-                  tickFormatter={v => `${v.toFixed(0)}%`}
-                  label={{
-                    value: '% vs base', angle: 90, position: 'insideRight',
-                    fill: 'var(--text-faint)', fontSize: 10,
-                    fontFamily: 'JetBrains Mono'
-                  }} />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload || !payload.length) return null;
-                    const p = payload[0].payload;
-                    return (
-                      <div style={{
-                        background: 'rgba(10,14,26,0.96)', border: '1px solid var(--border-strong)',
-                        borderRadius: 4, padding: '10px 14px',
-                        fontFamily: 'JetBrains Mono, monospace', fontSize: 11
-                      }}>
-                        <div style={{
-                          color: 'var(--text-dim)', marginBottom: 6,
-                          fontSize: 10, letterSpacing: '0.05em',
-                          textTransform: 'uppercase'
-                        }}>
-                          {p.capacity.toFixed(1)} MWh battery
-                        </div>
-                        <div style={{
-                          display: 'grid', gridTemplateColumns: 'auto auto',
-                          gap: '2px 16px'
-                        }}>
-                          <span style={{ color: 'var(--accent-teal)' }}>uplift €</span>
-                          <span style={{ textAlign: 'right' }}>{fmtMoney(p.uplift)}</span>
-                          <span style={{ color: 'var(--accent-violet)' }}>uplift %</span>
-                          <span style={{ textAlign: 'right' }}>{p.upliftPct.toFixed(2)}%</span>
-                          <span style={{ color: 'var(--accent-green)' }}>extra € / MWh</span>
-                          <span style={{ textAlign: 'right' }}>{fmtMoney(p.marginalEurPerMWh)}</span>
-                          <span style={{ color: 'var(--text-faint)' }}>total revenue</span>
-                          <span style={{ textAlign: 'right' }}>{fmtMoney(p.revenue)}</span>
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-                <Area yAxisId="left" type="monotone" dataKey="uplift"
-                  name="uplift (€)"
-                  fill="url(#capUpliftGrad)"
-                  stroke="var(--accent-teal)" strokeWidth={2}
-                  dot={{ fill: 'var(--accent-teal)', r: 3, strokeWidth: 0 }}
-                  activeDot={{ r: 5 }} />
-                <Line yAxisId="right" type="monotone" dataKey="upliftPct"
-                  name="uplift %"
-                  stroke="var(--accent-violet)" strokeWidth={1.5}
-                  strokeDasharray="4 4"
-                  dot={{ fill: 'var(--accent-violet)', r: 2.5, strokeWidth: 0 }} />
-                {sweetSpot && (
-                  <ReferenceLine yAxisId="left" x={sweetSpot.capacity}
-                    stroke="var(--accent-green)" strokeDasharray="2 4"
-                    strokeWidth={1.2}
-                    label={{
-                      value: 'best per MWh',
-                      position: 'top', fill: 'var(--accent-green)',
-                      fontSize: 10, fontFamily: 'JetBrains Mono'
-                    }} />
-                )}
-                <ReferenceLine yAxisId="left" x={baseParams.capacity}
-                  stroke="var(--text-faint)" strokeDasharray="2 4"
-                  strokeWidth={1}
-                  label={{
-                    value: 'current size',
-                    position: 'top', fill: 'var(--text-faint)',
-                    fontSize: 10, fontFamily: 'JetBrains Mono'
-                  }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex flex-wrap gap-4 mt-3 text-[10px] font-mono text-[color:var(--text-dim)]">
-            <span className="flex items-center gap-1.5"><span className="inline-block w-3" style={{ height: 2, background: 'var(--accent-teal)' }}></span> uplift €</span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3" style={{
-                height: 1.5, background: 'var(--accent-violet)',
-                backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-violet) 0 3px, transparent 3px 6px)'
-              }}></span>
-              uplift %
-            </span>
-            <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-px" style={{ background: 'var(--accent-green)' }}></span> marker · strongest uplift per MWh</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-px" style={{ background: 'var(--text-faint)' }}></span> current size</span>
-          </div>
-
-          {/* ====================================================== */}
-          {/* SECOND CHART: NET ANNUAL BENEFIT vs CAPACITY            */}
-          {/* ====================================================== */}
-          {financePoints && (
+      {financePoints && (
             <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
               <div className="flex flex-wrap items-baseline justify-between mb-3 gap-3">
                 <div>
@@ -1135,8 +886,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
 
             </div>
           )}
-        </>
-      )}
     </div>
     </>
   );
