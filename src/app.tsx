@@ -18,6 +18,7 @@ import {
 } from './charts/resultCharts';
 import { DataInputCard, type PowerPlantRow } from './panels/dataInputPanels';
 import { DegradationCard, EconomicsCard } from './panels/economicsDegradation';
+import { PvReconstructCard } from './panels/pvReconstructCard';
 import { OutputTable } from './tables/outputTable';
 import { boboApiUrl } from './data/api';
 import {
@@ -43,6 +44,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const [capacity, setCapacity] = useState(1);   // MWh (draft)
   const [chargeMax, setChargeMax] = useState(1);    // MW (draft)
   const [dischargeMax, setDischargeMax] = useState(1);   // MW (draft)
+  const [cRate, setCRate] = useState<'1C' | '0.5C'>('1C'); // (draft) — UI helper that derives chargeMax/dischargeMax from capacity
   const [chargeEff, setChargeEff] = useState(0.93); // frac (draft)
   const [dischargeEff, setDischargeEff] = useState(0.95); // frac (draft)
   const [initialSOC, setInitialSOC] = useState(0.5); // (draft)
@@ -167,8 +169,10 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       capacity,
       chargeMax,
       dischargeMax,
+      cRate,
       chargeEff,
       dischargeEff,
+
       initialSOC,
       installedCapacityMW ?? '',
       targetDsoc ?? 'auto',
@@ -193,6 +197,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     capacity,
     chargeMax,
     dischargeMax,
+    cRate,
     chargeEff,
     dischargeEff,
     initialSOC,
@@ -329,6 +334,14 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     if (!enabled) setClippingLimitMW(null);
     setHasUnappliedChanges(true);
   }, []);
+
+  const handleCRateChange = useCallback((next: '1C' | '0.5C') => {
+    setCRate(next);
+    const mult = next === '1C' ? 1 : 0.5;
+    setChargeMax(capacity * mult);
+    setDischargeMax(capacity * mult);
+    setHasUnappliedChanges(true);
+  }, [capacity]);
 
   const inputWindForSizing = customData?.wind ?? [];
   const inputSeriesSizingKey = useMemo(() => {
@@ -647,11 +660,51 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                   </button>
                 }
               />
-              <div className="card p-5">
+              <DataInputCard
+                customData={customData}
+                setCustomData={setCustomDataWithSource}
+                onClearBoboInflight={clearBoboInflight}
+                powerPlants={powerPlants}
+                plantsLoading={plantsLoading}
+                plantsError={plantsError}
+                seriesLoading={seriesLoading}
+                selectedPlantId={selectedPlantId}
+                onPickPlant={handlePickPlant}
+                boboStartDate={boboStartDate}
+                boboEndDate={boboEndDate}
+                onBoboStartDateChange={(v: string) => { setBoboStartDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
+                onBoboEndDateChange={(v: string) => { setBoboEndDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
+                selectedDateRange={selectedDateRange}
+                setSelectedDateRange={setSelectedDateRange}
+                onApplyPlantRange={handleApplyPlantRange}
+                canApplyPlantRange={hasUnappliedChanges}
+                boboSeriesError={boboSeriesError}
+              />
+              <div className="mt-6 card p-5">
                 <div>
                   <NumberInput label="Battery capacity" unit="MWh" min={1} max={powerSliderMax}
                     value={capacity} setValue={setCapacity}
                     hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
+                  <div className="mb-4">
+                    <div className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono mb-2">
+                      C-Rate
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button type="button" onClick={() => handleCRateChange('1C')}
+                        className={`py-2 text-xs font-mono border transition-colors ${cRate === '1C'
+                          ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
+                          : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
+                        }`}>1C</button>
+                      <button type="button" onClick={() => handleCRateChange('0.5C')}
+                        className={`py-2 text-xs font-mono border transition-colors ${cRate === '0.5C'
+                          ? 'bg-[color:var(--accent-teal)] border-[color:var(--accent-teal)] text-[#05140f]'
+                          : 'bg-transparent border-[color:var(--border)] text-[color:var(--text-dim)] hover:border-[color:var(--border-strong)]'
+                        }`}>0.5C</button>
+                    </div>
+                    <div className="text-[10px] text-[color:var(--text-faint)] mt-1 font-mono">
+                      {cRate === '1C' ? '1-hour battery · max power = capacity' : '2-hour battery · max power = capacity ÷ 2'}
+                    </div>
+                  </div>
                   <NumberInput label="Max charge power" unit="MW" min={1} max={powerSliderMax}
                     value={chargeMax} setValue={setChargeMax}
                     hint={`auto from data peak (${draftPeakMW.toFixed(1)} MW)`} />
@@ -734,6 +787,21 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     Finer steps refine stored-energy resolution in the dispatch model (more accurate, longer run time).
                   </div>
                 </div>
+                <PvReconstructCard
+                  customData={customData}
+                  pvReconstructEnabled={pvReconstructEnabled}
+                  onPvReconstructEnabled={handlePvReconstructEnabled}
+                  clippingLimitMW={clippingLimitMW}
+                  setClippingLimitMW={setClippingLimitMW}
+                  pvDayThr={pvDayThr}
+                  setPvDayThr={setPvDayThr}
+                  pvWideGap={pvWideGap}
+                  setPvWideGap={setPvWideGap}
+                  pvPeakFactor={pvPeakFactor}
+                  setPvPeakFactor={setPvPeakFactor}
+                  pvReconstructStats={appliedResult?.pvReconstructStats ?? null}
+                  horizonTrim={appliedResult?.horizonTrim ?? null}
+                />
                 <div className="hairline my-4"></div>
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -762,38 +830,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                   {err && <div className="mt-3 text-xs text-[color:var(--accent-rose)] font-mono">Error: {err}</div>}
                 </div>
               </div>
-              <DataInputCard
-                customData={customData}
-                setCustomData={setCustomDataWithSource}
-                onClearBoboInflight={clearBoboInflight}
-                powerPlants={powerPlants}
-                plantsLoading={plantsLoading}
-                plantsError={plantsError}
-                seriesLoading={seriesLoading}
-                selectedPlantId={selectedPlantId}
-                onPickPlant={handlePickPlant}
-                boboStartDate={boboStartDate}
-                boboEndDate={boboEndDate}
-                onBoboStartDateChange={(v: string) => { setBoboStartDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
-                onBoboEndDateChange={(v: string) => { setBoboEndDate(v); setHasUnappliedChanges(true); setBoboSeriesError(null); }}
-                selectedDateRange={selectedDateRange}
-                setSelectedDateRange={setSelectedDateRange}
-                onApplyPlantRange={handleApplyPlantRange}
-                canApplyPlantRange={hasUnappliedChanges}
-                boboSeriesError={boboSeriesError}
-                pvReconstructEnabled={pvReconstructEnabled}
-                onPvReconstructEnabled={handlePvReconstructEnabled}
-                clippingLimitMW={clippingLimitMW}
-                setClippingLimitMW={setClippingLimitMW}
-                pvDayThr={pvDayThr}
-                setPvDayThr={setPvDayThr}
-                pvWideGap={pvWideGap}
-                setPvWideGap={setPvWideGap}
-                pvPeakFactor={pvPeakFactor}
-                setPvPeakFactor={setPvPeakFactor}
-                pvReconstructStats={appliedResult?.pvReconstructStats ?? null}
-                horizonTrim={appliedResult?.horizonTrim ?? null}
-              />
               <EconomicsCard
                 batteryCostPerKWh={batteryCostPerKWh}
                 setBatteryCostPerKWh={setBatteryCostPerKWh}
