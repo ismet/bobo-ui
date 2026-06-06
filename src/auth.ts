@@ -1,5 +1,5 @@
-export const AUTH_STORAGE_KEY = 'bobo-ui-auth';
-export const AUTH_ACTIVITY_KEY = 'bobo-ui-auth-at';
+export const AUTH_STORAGE_KEY = 'bataryaopt-auth';
+export const AUTH_ACTIVITY_KEY = 'bataryaopt-auth-at';
 /** Sign out after this many ms without user interaction. */
 export const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
