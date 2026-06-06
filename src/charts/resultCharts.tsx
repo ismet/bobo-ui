@@ -357,7 +357,7 @@ export const PvGenerationCompareChart = memo(({ result }: { result: Optimization
                    minTickGap={60} stroke="var(--text-faint)"/>
             <YAxis stroke="var(--text-faint)" width={48}
                    label={{ value: 'MW', angle: -90, position: 'insideLeft', fill: 'var(--text-faint)', fontSize: 10, fontFamily: 'JetBrains Mono' }}/>
-            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length - 1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
+            <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length - 1)].t * dt, true, result.chartEpochUtcMs)}/>}/>
             <Line type="monotone" dataKey="measured" name="measured" hide={!iso.active('measured')}
                   stroke="var(--text-dim)" dot={false} strokeWidth={1.2} strokeDasharray="4 3"/>
             <Line type="monotone" dataKey="reconstructed" name="reconstructed" hide={!iso.active('reconstructed')}
