@@ -49,21 +49,7 @@ export function Footer() {
   return (
     <footer className="border-t border-[color:var(--border)] mt-10">
       <div className="w-full px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-[color:var(--text-faint)]">
-        <div>
-          Demo / illustrative scenario — not a warranty or guarantee.
-          {' '}
-          Built around{' '}
-          <a
-            href="https://www.epias.com.tr/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[color:var(--text-dim)] underline decoration-[color:var(--border-strong)] underline-offset-2 hover:text-[color:var(--accent-teal)]"
-          >
-            EPİAŞ
-          </a>
-          -aligned transparency and market data workflows.
-        </div>
-        <div>Runs locally · paste files or pull registered plant series</div>
+        <div>Mathematical optimization is based on a deterministic approach.</div>
       </div>
     </footer>
   );
