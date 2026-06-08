@@ -69,64 +69,6 @@ export function Footer() {
   );
 }
 
-export const MarketOverview = memo(({ price, wind, dateRangeLabel }: {
-  price: number[];
-  wind: number[];
-  dateRangeLabel: string;
-}) => {
-  const stats = useMemo(() => {
-    const n = price.length;
-    const pSum = price.reduce((a,b)=>a+b, 0);
-    const wSum = wind.reduce((a,b)=>a+b, 0);
-    const pSorted = [...price].sort((a,b)=>a-b);
-    const pMedian = pSorted[Math.floor(n/2)];
-    const pP95 = pSorted[Math.floor(n*0.95)];
-    const pP05 = pSorted[Math.floor(n*0.05)];
-    return {
-      priceAvg: pSum / n,
-      priceMedian: pMedian,
-      pricep95: pP95,
-      pricep05: pP05,
-      windMean: wSum / n,
-      windPeak: Math.max(...wind),
-      windCF: (wSum / n) / Math.max(...wind, 1e-12), // mean / peak (utilisation)
-      n
-    };
-  }, [price, wind]);
-
-  return (
-    <div className="mt-6 card p-5">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-3">Site signals · {dateRangeLabel}</div>
-      <div className="grid grid-cols-2 gap-3 text-sm font-mono">
-        <div>
-          <div className="text-[10px] text-[color:var(--text-faint)] uppercase">Avg price</div>
-          <div className="num text-[color:var(--accent-teal)]">€{stats.priceAvg.toFixed(1)}/MWh</div>
-        </div>
-        <div>
-          <div className="text-[10px] text-[color:var(--text-faint)] uppercase">Median</div>
-          <div className="num">€{stats.priceMedian.toFixed(1)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] text-[color:var(--text-faint)] uppercase">P5 — P95</div>
-          <div className="num">€{stats.pricep05.toFixed(0)} — €{stats.pricep95.toFixed(0)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] text-[color:var(--text-faint)] uppercase">Mean generation</div>
-          <div className="num text-[color:var(--accent-amber)]">{stats.windMean.toFixed(1)} MW</div>
-        </div>
-        <div>
-          <div className="text-[10px] text-[color:var(--text-faint)] uppercase">Peak generation</div>
-          <div className="num">{stats.windPeak.toFixed(1)} MW</div>
-        </div>
-        <div>
-          <div className="text-[10px] text-[color:var(--text-faint)] uppercase">Mean / peak</div>
-          <div className="num">{(stats.windCF*100).toFixed(0)}%</div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
 export const KPIRow = memo(({ result }: { result: OptimizationRunResult }) => {
   const { traj, dt } = result;
   const stats = useMemo(() => {

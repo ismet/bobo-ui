@@ -1,111 +1,9 @@
 // ============================================================================
-// DATA INPUT CARD — paste your own price & generation series
+// DATA INPUT CARD — EPİAŞ plant & market series
 // ============================================================================
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { parsePaste, type PredefinedDateRange, PREDEFINED_DATE_RANGES, computePredefinedRange } from '../formatUtils';
-import { NumberInput } from '../uiPrimitives';
-import type { ChangeEvent, CSSProperties, DragEvent, KeyboardEvent } from 'react';
-
-export type FlashMsg = { tone: 'error' | 'info'; text: string };
-
-// File upload (CSV / JSON) — accepts JSON with price/wind arrays,
-// or any 2-column CSV with headers price/generation (or price/wind), or one column each.
-export function FileUploadPanel({ setCustomData, parentSetMessage }: {
-  setCustomData: (data: { price: number[]; wind: number[] } | null, fromBobo?: boolean) => void;
-  parentSetMessage?: (m: FlashMsg | null) => void;
-}) {
-  const [localMsg, setLocalMsg] = useState<FlashMsg | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleFile = async (file: File | undefined) => {
-    setLocalMsg(null);
-    if (!file) return;
-    try {
-      const text = await file.text();
-      let price, wind;
-
-      // JSON branch
-      if (file.name.toLowerCase().endsWith('.json') || text.trim().startsWith('{') || text.trim().startsWith('[')) {
-        const obj = JSON.parse(text);
-        if (Array.isArray(obj.price) && Array.isArray(obj.wind)) {
-          price = obj.price.map(Number); wind = obj.wind.map(Number);
-        } else if (Array.isArray(obj?.data?.price) && Array.isArray(obj?.data?.wind)) {
-          price = obj.data.price.map(Number); wind = obj.data.wind.map(Number);
-        } else {
-          throw new Error('JSON must have arrays "price" and "wind".');
-        }
-      } else {
-        // CSV / TSV / whitespace branch
-        const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-        // Detect header
-        const splitLine = (l: string) => l.split(/[,;\t\s]+/).filter(Boolean);
-        let startIdx = 0;
-        const first = splitLine(lines[0] || '');
-        const hasHeader = first.length >= 2 && first.some(t => isNaN(Number(t)));
-        let priceCol = 0, windCol = 1;
-        if (hasHeader) {
-          const lower = first.map((s: string) => s.toLowerCase());
-          const pIdx = lower.findIndex((s: string) => s.includes('price') || s.includes('mcp') || s.includes('ptf'));
-          const wIdx = lower.findIndex((s: string) => s.includes('wind') || s.includes('gen') || s.includes('total') || s.includes('mwh'));
-          if (pIdx !== -1) priceCol = pIdx;
-          if (wIdx !== -1) windCol  = wIdx;
-          startIdx = 1;
-        }
-        price = []; wind = [];
-        for (let i = startIdx; i < lines.length; i++) {
-          const toks = splitLine(lines[i]);
-          if (toks.length < 2) continue;
-          const p = Number(toks[priceCol]);
-          const w = Number(toks[windCol]);
-          if (Number.isFinite(p) && Number.isFinite(w)) { price.push(p); wind.push(w); }
-        }
-      }
-
-      if (!price || price.length < 24) throw new Error(`Only ${price?.length || 0} valid rows parsed (need ≥ 24).`);
-      if (price.length !== wind.length) throw new Error(`Length mismatch: ${price.length} prices vs ${wind.length} generation values.`);
-
-      setCustomData({ price, wind });
-      const msg = `Loaded ${price.length.toLocaleString()} hours from ${file.name}.`;
-      setLocalMsg({ tone: 'info', text: msg });
-      parentSetMessage?.({ tone: 'info', text: msg });
-    } catch (e: unknown) {
-      setLocalMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
-    }
-  };
-
-  const onDrop = (ev: DragEvent) => {
-    ev.preventDefault();
-    const f = ev.dataTransfer?.files?.[0];
-    if (f) handleFile(f);
-  };
-
-  return (
-    <div className="mt-3">
-      <input ref={inputRef} type="file" accept=".csv,.tsv,.json,.txt"
-             style={{ display: 'none' }}
-             onChange={e => handleFile(e.target.files?.[0])}/>
-      <div onClick={() => inputRef.current?.click()}
-           onDragOver={e => e.preventDefault()}
-           onDrop={onDrop}
-           style={{
-             border: '1px dashed var(--border-strong)', borderRadius: 4,
-             padding: '24px 16px', textAlign: 'center', cursor: 'pointer',
-             background: 'var(--bg)', transition: 'border-color .15s'
-           }}>
-        <div className="font-mono text-xs" style={{ color: 'var(--accent-teal)' }}>↑ Click or drop file</div>
-        <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-faint)', lineHeight: 1.5 }}>
-          Accepts JSON with <code>price</code> and <code>wind</code> arrays, <br/>
-          or CSV/TSV with <code>price</code> + generation columns (header optional; <code>wind</code> still works).
-        </div>
-      </div>
-      {localMsg && (
-        <div className="mt-3 text-xs font-mono" style={{
-          color: localMsg.tone === 'error' ? 'var(--accent-rose)' : 'var(--accent-green)'
-        }}>{localMsg.text}</div>
-      )}
-    </div>
-  );
-}
+import { type PredefinedDateRange, PREDEFINED_DATE_RANGES, computePredefinedRange } from '../formatUtils';
+import type { ChangeEvent, KeyboardEvent } from 'react';
 
 export type PowerPlantRow = { id: string | number; name?: string };
 
@@ -243,8 +141,7 @@ export function PowerPlantCombobox({
 }
 
 export const DataInputCard = memo(({
-  customData, setCustomData,
-  onClearBoboInflight,
+  customData,
   powerPlants, plantsLoading, plantsError,
   seriesLoading, selectedPlantId, onPickPlant,
   boboStartDate, boboEndDate, onBoboStartDateChange, onBoboEndDateChange,
@@ -253,8 +150,6 @@ export const DataInputCard = memo(({
   boboSeriesError,
 }: {
   customData: { price: number[]; wind: number[] } | null;
-  setCustomData: (data: { price: number[]; wind: number[] } | null, fromBobo?: boolean) => void;
-  onClearBoboInflight?: () => void;
   powerPlants: PowerPlantRow[];
   plantsLoading: boolean;
   plantsError: string | null;
@@ -271,65 +166,6 @@ export const DataInputCard = memo(({
   canApplyPlantRange: boolean;
   boboSeriesError: string | null;
 }) => {
-  const [tab, setTab] = useState('paste'); // 'paste' | 'upload'
-  const [priceText, setPriceText] = useState('');
-  const [windText,  setWindText]  = useState('');
-  const [message,   setMessage]   = useState<FlashMsg | null>(null);
-
-  const handleLoad = () => {
-    onClearBoboInflight?.();
-    setMessage(null);
-    const p = parsePaste(priceText);
-    if (p.kind === 'error') { setMessage({ tone: 'error', text: `Price box: ${p.message}` }); return; }
-
-    let price, wind;
-
-      if (p.kind === 'two') {
-      // Excel-style paste in the price textarea: both columns in one shot
-      price = p.price;
-      wind  = p.wind;
-      if (windText.trim()) {
-        setMessage({ tone: 'info', text: `Detected 2-column paste in Price box — ignoring Generation box.` });
-      }
-    } else {
-      // Single-column price; we need generation separately
-      price = p.values;
-      if (!windText.trim()) {
-        setMessage({ tone: 'error', text: `Generation box is empty. Paste generation (MW) or use 2-column format in Price box.` });
-        return;
-      }
-      const w = parsePaste(windText);
-      if (w.kind === 'error') { setMessage({ tone: 'error', text: `Generation box: ${w.message}` }); return; }
-      if (w.kind === 'two') {
-        setMessage({ tone: 'error', text: `Generation box looks 2-column. Paste one column only, or put both columns in the Price box.` });
-        return;
-      }
-      wind = w.values;
-    }
-
-    if (price.length !== wind.length) {
-      setMessage({ tone: 'error', text: `Length mismatch: ${price.length} prices vs ${wind.length} generation values.` });
-      return;
-    }
-
-    setCustomData({ price, wind });
-    setMessage({ tone: 'info', text: `Loaded ${price.length.toLocaleString()} hours.` });
-  };
-
-  const handleReset = () => {
-    onClearBoboInflight?.();
-    setCustomData(null);
-    setMessage(null);
-    setPriceText(''); setWindText('');
-  };
-
-  const textareaStyle: CSSProperties = {
-    background: 'var(--bg)', border: '1px solid var(--border)',
-    borderRadius: 4, color: 'var(--text)', padding: '8px 10px',
-    fontFamily: 'JetBrains Mono, monospace', fontSize: 11, lineHeight: 1.4,
-    width: '100%', resize: 'vertical', outline: 'none',
-    marginTop: 6, marginBottom: 12
-  };
   const yesterday = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -339,23 +175,6 @@ export const DataInputCard = memo(({
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   }, []);
-
-  const tabBtn = (key: string, label: string) => {
-    const active = tab === key;
-    return (
-      <button key={key} onClick={() => setTab(key)}
-        style={{
-          padding: '6px 12px', fontSize: 11, fontFamily: 'JetBrains Mono, monospace',
-          letterSpacing: '0.05em', textTransform: 'uppercase',
-          color: active ? 'var(--accent-teal)' : 'var(--text-dim)',
-          borderBottom: active ? '1px solid var(--accent-teal)' : '1px solid transparent',
-          background: 'transparent', cursor: 'pointer',
-          marginBottom: -1
-        }}>
-        {label}
-      </button>
-    );
-  };
 
   return (
     <div className="mt-6 card p-5">
@@ -377,9 +196,7 @@ export const DataInputCard = memo(({
         </span>
       </div>
 
-      <p className="mb-2 text-[10px] font-mono text-[color:var(--text-faint)] leading-relaxed">
-        Select a registered power plant to load hourly wholesale price and net generation for your date range—served through this app’s EPİAŞ-aligned transparency integration.
-      </p>
+
       <PowerPlantCombobox
         plants={powerPlants}
         plantsLoading={plantsLoading}
@@ -451,79 +268,6 @@ export const DataInputCard = memo(({
           Power plant data: {boboSeriesError}
         </div>
       )}
-
-      <details>
-        <summary className="text-xs text-[color:var(--text-dim)] font-mono py-1.5" style={{ userSelect: 'none' }}>
-          <span style={{ color: 'var(--accent-teal)' }}>▸</span> load price &amp; generation series
-        </summary>
-
-        <div className="mt-3" style={{ borderBottom: '1px solid var(--border)', display: 'flex', gap: 4 }}>
-          {tabBtn('paste',  'Paste')}
-          {tabBtn('upload', 'Upload file')}
-        </div>
-
-        {tab === 'paste' && (
-          <div className="mt-3">
-            <div className="text-[10px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
-              Price &nbsp;<span style={{ color: 'var(--text-faint)' }}>€/MWh · hourly</span>
-            </div>
-            <textarea value={priceText} onChange={e => setPriceText(e.target.value)}
-              placeholder={"One value per line, OR paste 2 columns from Excel\n(price<tab>generation MW) — both series get filled at once"}
-              rows={5} style={textareaStyle}
-            />
-
-            <div className="text-[10px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
-              Generation &nbsp;<span style={{ color: 'var(--text-faint)' }}>MW · hourly</span>
-            </div>
-            <textarea value={windText} onChange={e => setWindText(e.target.value)}
-              placeholder="One value per line — plant output in MW (ignored if Price box had 2 columns)"
-              rows={5} style={textareaStyle}
-            />
-
-            <div className="flex gap-2">
-              <button onClick={handleLoad} className="btn-primary" style={{ flex: 1 }}>Load data</button>
-              <button onClick={handleReset}
-                      style={{ padding: '10px 12px', border: '1px solid var(--border)',
-                               borderRadius: 4, color: 'var(--text-dim)', fontSize: 12,
-                               fontFamily: 'DM Sans', fontWeight: 500 }}>
-                Clear data
-              </button>
-            </div>
-
-            {message && (
-              <div className="mt-3 text-xs font-mono" style={{
-                color: message.tone === 'error' ? 'var(--accent-rose)' : 'var(--accent-green)'
-              }}>{message.text}</div>
-            )}
-
-            <div className="mt-3 text-[10px] font-mono text-[color:var(--text-faint)] leading-relaxed" style={{ lineHeight: 1.5 }}>
-              Accepts Excel paste (tab-separated), CSV, whitespace or one-per-line.<br/>
-              Horizon auto-clamps to dataset length. Min 24 hours.
-            </div>
-          </div>
-        )}
-
-        {tab === 'upload' && (
-          <FileUploadPanel setCustomData={setCustomData} parentSetMessage={setMessage}/>
-        )}
-
-        {tab !== 'paste' && (
-          <div className="mt-3 flex gap-2">
-            <button onClick={handleReset}
-                    style={{ padding: '8px 12px', border: '1px solid var(--border)',
-                             borderRadius: 4, color: 'var(--text-dim)', fontSize: 12,
-                             fontFamily: 'DM Sans', fontWeight: 500 }}>
-              Clear data
-            </button>
-            {message && (
-              <div className="text-xs font-mono" style={{
-                alignSelf: 'center',
-                color: message.tone === 'error' ? 'var(--accent-rose)' : 'var(--accent-green)'
-              }}>{message.text}</div>
-            )}
-          </div>
-        )}
-      </details>
     </div>
   );
 });

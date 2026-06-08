@@ -10,7 +10,6 @@ import {
   Footer,
   Header,
   KPIRow,
-  MarketOverview,
   PriceDurationCurve,
   ActionHistogram,
   PvGenerationCompareChart,
@@ -662,8 +661,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
               />
               <DataInputCard
                 customData={customData}
-                setCustomData={setCustomDataWithSource}
-                onClearBoboInflight={clearBoboInflight}
                 powerPlants={powerPlants}
                 plantsLoading={plantsLoading}
                 plantsError={plantsError}
@@ -848,13 +845,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                 capacity={capacity}
                 batteryCostPerKWh={batteryCostPerKWh}
               />
-              {appliedResult && (
-                <MarketOverview
-                  price={appliedResult.pricePeriod}
-                  wind={appliedResult.windPeriod}
-                  dateRangeLabel={appliedResult.dateRangeLabel}
-                />
-              )}
+
             </aside>
           )}
 
@@ -891,28 +882,28 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                 <>
                   <SectionHeader eyebrow="03 · dispatch &amp; cycling"
                     title="Stored energy and power, hour by hour"
-                    kicker="Recommended schedule from dispatch optimization—state of charge plus charge/discharge power. Bars above zero export to the grid; below zero draw power for charging."
+
                   />
                   <DispatchChart result={appliedResult} />
 
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="04 · market-aligned operation"
                     title="Dispatch vs wholesale price"
-                    kicker="Same optimized schedule against the market—energy shifted to high-price hours, replenished in low-price hours."
+
                   />
                   <BatteryVsPriceChart result={appliedResult} />
 
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="05 · value from storage"
                     title="Extra revenue from co-located BESS"
-                    kicker="Generation-only revenue vs plant + battery—the gap is the incremental value your system delivers at this site."
+
                   />
                   <UpliftChart result={appliedResult} />
 
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="06 · utilization profile"
                     title="Cycling pattern vs price"
-                    kicker="How charge, idle, and discharge hours fall across wholesale price bands—useful for throughput and warranty discussions."
+
                   />
                   <div className="grid grid-cols-12 gap-6">
                     <div className="col-span-12 md:col-span-6"><ActionHistogram result={appliedResult} /></div>
@@ -922,7 +913,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="07 · sizing sweep"
                     title="How does project value scale with energy capacity?"
-                    kicker="Repeated dispatch optimization across MWh sizes—typical for quoting modular racks or proving ROI at different pack sizes. Inverter limits match the left panel unless power scales with energy."
+
                   />
                   <CapacitySweepChart
                     basePrice={appliedResult.pricePeriod}
@@ -942,7 +933,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="08 · dispatch export"
                     title="Hour-by-hour operation table"
-                    kicker="Physical dispatch, throughput, and revenue by interval—export for customer studies, warranty models, or integration specs."
+
                   />
                   <OutputTable result={appliedResult} sweepResult={sweepOptimalResult} />
 

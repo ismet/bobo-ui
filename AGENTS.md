@@ -20,7 +20,7 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
 - **Typecheck** (no npm script): `npx tsc --noEmit -p tsconfig.json` covers `src/` + `scripts/`; `npx tsc --noEmit -p tsconfig.node.json` covers `vite.config.ts` and `scripts/**/*.ts`. Both configs are `strict`, `noEmit`. Run both before claiming a change compiles.
 - **Smoke test**: `node scripts/verify-ui.mjs` — Playwright script, not in `package.json`. Needs `playwright` installed separately and a dev/preview server on `127.0.0.1:5173`. Hits `/api/power-plants`, then drives paste → PV ON → optimize, asserts horizon trim + KPI visibility + interval count. Expects exactly **1416 intervals** from 1422 input hours with PV on (6 dropped to make 59 full days).
 - **No CI, no pre-commit hooks, no husky.** No `.github/` directory. Don't expect a status check on PRs.
-- **Search workflow**: use the Augment Context Engine MCP (see `.cursor/rules/augment-context-engine.mdc` for the full protocol — pre-edit batched query, `Read` after, `Grep` only for known symbols). Don't `cd`/`find`/`rg` to discover behavior.
+- **Search workflow**: Prefer `Read` and `Grep` over `cd`/`find`/`rg` to discover behavior.
 
 ## Source layout
 
@@ -42,13 +42,13 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
 | `src/vite-env.d.ts` | `ImportMetaEnv.VITE_AUTH_USERS` typing |
 | `css/utilities.css`, `css/theme.css` | Utility classes + design tokens |
 | `scripts/` | `benchmark-dp.ts`, `dp-worker-thread.ts`, `verify-ui.mjs` |
-| `render.yaml` | Render static site (`bobo-ui`). `package.json` name is `epias-frontend` — the two differ. |
-| **Large files** (use `Read` with offset) | `src/app.tsx` 962 · `src/charts/capacitySweepChart.tsx` 892 · `src/charts/resultCharts.tsx` 658 · `src/panels/dataInputPanels.tsx` 625 lines |
+| `render.yaml` | Render static site (`bataryaopt`). `package.json` name is `epias-frontend` — the two differ. |
+| **Large files** (use `Read` with offset) | `src/app.tsx` 989 · `src/charts/capacitySweepChart.tsx` 880 · `src/charts/resultCharts.tsx` 600 · `src/panels/dataInputPanels.tsx` 273 lines |
 
 ## Architecture
 
 - **State**: `useState` / `useCallback` / `useMemo` / `useEffect` in `app.tsx` — no external state library.
-- **Draft vs applied**: Sidebar inputs are **draft** until the user clicks **Optimize dispatch**. Charts, KPIs, and the operation table read **`appliedResult`** (and the applied economics fields: `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct`, and a derived `appliedCrf`). Changing draft values without optimizing does not move result charts. `sweepOptimalResult` is set by `CapacitySweepChart` when a sizing sweep completes (not by `optimize()`) and is cleared by `clearAppliedSnapshot` (`app.tsx:298`) whenever `customData` or sidebar params change, so the OutputTable reverts to `appliedResult` and never shows a stale sweep optimum.
+- **Draft vs applied**: Sidebar inputs are **draft** until the user clicks **Optimize dispatch**. Charts, KPIs, and the operation table read **`appliedResult`** (and the applied economics fields: `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct`, and a derived `appliedCrf`). Changing draft values without optimizing does not move result charts. `sweepOptimalResult` is set by `CapacitySweepChart` when a sizing sweep completes (not by `optimize()`) and is cleared by `clearAppliedSnapshot` (`app.tsx:295`) whenever `customData` or sidebar params change, so the OutputTable reverts to `appliedResult` and never shows a stale sweep optimum.
 - **Auto-sizing**: on every new `customData`, `capacity`, `chargeMax`, `dischargeMax`, and `installedCapacityMW` are all auto-snapshotted to `peakGenerationMW(wind)`. `NumberInput` `max` is `max(100, ceil(peak × 1.25))`. The user can still override any value; the auto-set only fires on data load.
 - **Authentication** (build-time gate):
   - `VITE_AUTH_USERS` is a **build-time** JSON array of `{ username, password }`. `.env.example` is the committed template; `.env.local` is gitignored and holds the real list.
@@ -56,7 +56,7 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
   - **Idle timeout 10 min** (`IDLE_TIMEOUT_MS = 10 × 60 × 1000`). Activity tracked on `mousedown / keydown / scroll / touchstart` + `visibilitychange`; re-checked every 30 s.
   - `App` accepts optional `onLogout?: () => void`; `Header` shows a "Log out" chip when provided.
   - When `VITE_AUTH_USERS` is missing/empty, the login screen surfaces a "not configured" error.
-  - **localStorage keys** (in `src/auth.ts`): `bobo-ui-auth` = `'1'` when logged in; `bobo-ui-auth-at` = last-activity ms (epoch). `touchActivity()` is throttled to 1 s. Manipulate via the auth helpers, not by writing these keys directly.
+  - **localStorage keys** (in `src/auth.ts`): `bataryaopt-auth` = `'1'` when logged in; `bataryaopt-auth-at` = last-activity ms (epoch). `touchActivity()` is throttled to 1 s. Manipulate via the auth helpers, not by writing these keys directly.
 - **DP engine**: Pure TS in `runOptimization.ts`. Browser runs via `runOptimizationDelegated()` → `optimizationWorker.ts`. Falls back to sync `runOptimization()` when `Worker` is unavailable or the page is served on **`file://`**.
 - **Remote API** (no local backend): `https://bobo-api.onrender.com`
   - Browser base URL: `boboApiUrl()` in `src/data/api.ts` → `BOBO_API_BASE`
@@ -185,7 +185,7 @@ At sweep point closest to sidebar `capacity`: year table (retention, nominal upl
 
 ### Sweep optimum result
 
-`sweepOptimalResult` — an `OptimizationRunResult` set by the sweep at its financially optimal point (max positive `netAnnual`). Read only by the `OutputTable`. Cleared by `clearAppliedSnapshot` (`app.tsx:298`) on data load, EPİAŞ refetch, or successful optimize commit (`app.tsx:556`); also cleared by a fresh sweep. Distinct from `appliedResult` (which comes from the sidebar **Optimize dispatch** path).
+`sweepOptimalResult` — an `OptimizationRunResult` set by the sweep at its financially optimal point (max positive `netAnnual`). Read only by the `OutputTable`. Cleared by `clearAppliedSnapshot` (`app.tsx:295`) on data load, EPİAŞ refetch, or successful optimize commit (`app.tsx:569`); also cleared by a fresh sweep. Distinct from `appliedResult` (which comes from the sidebar **Optimize dispatch** path).
 
 ## Data input
 
@@ -206,13 +206,13 @@ The "**Load EPİAŞ data**" button is gated on the `hasUnappliedChanges` flag (s
 ## Quirks
 
 - `.gitignore` exists at the repo root (`.env.local`, `node_modules/`, `dist/`). `.env.example` is committed (template); `.env.local` is gitignored and holds local-only `VITE_AUTH_USERS`.
-- Render service name (`bobo-ui` in `render.yaml`) differs from `package.json` name (`epias-frontend`).
+- Render service name (`bataryaopt` in `render.yaml`) differs from `package.json` name (`epias-frontend`).
 - ESM (`"type": "module"`). Node scripts use `tsx`.
 - `tsconfig.json`: `noEmit: true`, `"include": ["src", "scripts"]`. `tsconfig.node.json`: `vite.config.ts` + `scripts/**/*.ts`.
 - `dt` is fixed **1.0 h** per row in `app.tsx`.
 - Optimization overlay dismissal is deferred after a successful commit: two `requestAnimationFrame`s, then `requestIdleCallback` (2 s timeout) or `setTimeout(200)`, then a 500 ms hold, so charts paint before the overlay closes.
 - **Node engine** `>=20 <23` per `package.json` `engines`. Render's static-site runtime mirrors this; bumping requires checking Render's available Node versions first.
-- **Adding a sidebar field?** Register it in three places in `app.tsx`: the `useState` declaration, the `draftScenarioKey` `useMemo` (`app.tsx:156-213`), and the local `snap*` snapshot in the `optimize()` callback (`app.tsx:429-460`). Forgetting `draftScenarioKey` makes the change invisible to the "Pending changes" indicator and `hasPendingChanges`; forgetting the snapshot causes stale-closure reads during optimize. Also add an `applied*` state + setter + `clearAppliedSnapshot` entry if the field is consumed by result charts.
-- **The "applied snapshot" is a single commit point** at `app.tsx:548-554` that flips seven `applied*` states together: `appliedScenarioKey`, `appliedResult`, `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct` (`appliedCrf` is derived, not stored). If a new field is consumed by result charts or sweep finance, register its setter here **and** add a reset line to `clearAppliedSnapshot` (`app.tsx:290-299`). `sweepOptimalResult` is a separate state managed by the sweep, not the sidebar — it does not need a `snap*` mirror, but it is cleared by `clearAppliedSnapshot`.
+- **Adding a sidebar field?** Register it in three places in `app.tsx`: the `useState` declaration, the `draftScenarioKey` `useMemo` (`app.tsx:158-214`), and the local `snap*` snapshot in the `optimize()` callback (`app.tsx:442-473`). Forgetting `draftScenarioKey` makes the change invisible to the "Pending changes" indicator and `hasPendingChanges`; forgetting the snapshot causes stale-closure reads during optimize. Also add an `applied*` state + setter + `clearAppliedSnapshot` entry if the field is consumed by result charts.
+- **The "applied snapshot" is a single commit point** at `app.tsx:545-567` that flips seven `applied*` states together: `appliedScenarioKey`, `appliedResult`, `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct` (`appliedCrf` is derived, not stored). If a new field is consumed by result charts or sweep finance, register its setter here **and** add a reset line to `clearAppliedSnapshot` (`app.tsx:295-304`). `sweepOptimalResult` is a separate state managed by the sweep, not the sidebar — it does not need a `snap*` mirror, but it is cleared by `clearAppliedSnapshot`.
 - **`.opencode/`, `.cursor/`, `.commandcode/` are local agent tooling** (opencode / Cursor / CommandCode), not part of the app. App source is only `src/`, `scripts/`, `css/`. Don't `npm install` inside `.opencode/` or modify its `package.json` from app work.
 - **Web Worker is module-bundled by Vite**: `optimizationRunner.ts:12` uses `new Worker(new URL('./optimizationWorker.ts', import.meta.url), { type: 'module' })`. Don't move `optimizationWorker.ts` out of `src/engine/` without updating that URL — Vite needs the literal relative path.

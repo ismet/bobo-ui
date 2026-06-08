@@ -1,5 +1,5 @@
 // ============================================================================
-// Helpers (formatting & paste parsing)
+// Helpers (formatting)
 // ============================================================================
 
 export function fmtNumber(x: number, digits = 0): string {
@@ -61,48 +61,6 @@ export function tsLabel(hourOffset: number, showTime = false, epochUtcMs: number
     return `${mon} ${dd} ${hh}:${mm}`;
   }
   return `${mon} ${dd}`;
-}
-
-export type ParsePasteResult =
-  | { kind: 'two'; price: number[]; wind: number[] }
-  | { kind: 'single'; values: number[] }
-  | { kind: 'error'; message: string };
-
-export function parsePaste(raw: string): ParsePasteResult {
-  if (!raw || !raw.trim()) return { kind: 'error', message: 'empty' };
-  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const splitLine = (l: string) => l.split(/[,;\s\t]+/).filter(Boolean);
-
-  let twoColRows = 0, oneColRows = 0;
-  for (const l of lines) {
-    const toks = splitLine(l);
-    const nums = toks.map(Number).filter(n => !isNaN(n));
-    if (nums.length >= 2) twoColRows++;
-    else if (nums.length === 1) oneColRows++;
-  }
-
-  if (twoColRows >= 5 && twoColRows >= 0.75 * lines.length) {
-    const price: number[] = [], wind: number[] = [];
-    for (const l of lines) {
-      const toks = splitLine(l).map(Number);
-      if (toks.length >= 2 && !isNaN(toks[0]!) && !isNaN(toks[1]!)) {
-        price.push(toks[0]!);
-        wind.push(toks[1]!);
-      }
-    }
-    if (price.length < 24) return { kind: 'error', message: `only ${price.length} valid rows parsed` };
-    return { kind: 'two', price, wind };
-  }
-
-  const values: number[] = [];
-  for (const l of lines) {
-    for (const t of splitLine(l)) {
-      const n = Number(t);
-      if (!isNaN(n)) values.push(n);
-    }
-  }
-  if (values.length < 24) return { kind: 'error', message: `only ${values.length} numeric values found` };
-  return { kind: 'single', values };
 }
 
 export function formatLocalYMD(d: Date): string {

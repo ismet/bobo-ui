@@ -69,10 +69,7 @@ export const EconomicsCard = memo(({
         <span className="text-[color:var(--text-dim)]">Annualised cost</span>
         <span className="num text-[color:var(--accent-amber)]">{fmtMoney(annualised)}/yr</span>
 
-        <span className="text-[color:var(--text-faint)] text-[10px] mt-1 leading-relaxed" style={{ gridColumn: '1 / -1' }}>
-          Up-front cost is unit battery price times installed energy.<br/>
-          Annual carrying cost applies {(crf * 100).toFixed(2)}% of that CAPEX each year at your interest rate and lifetime (capital recovery style charge).
-        </span>
+
       </div>
     </div>
   );
@@ -251,10 +248,7 @@ export const DegradationCard = memo(({
           <text x={W - PAD_R - 16} y={H - 3} className="axis-label">{lifetimeYears}y</text>
         </svg>
       </div>
-      <div className="mt-2 text-[10px] text-[color:var(--text-faint)]" style={{ lineHeight: 1.5 }}>
-        The curve blends a higher first-year loss rate with a steady long-run rate. End-of-life
-        retention follows from the year-1 and long-term fade settings and the project life.
-      </div>
+
     </div>
   );
 });

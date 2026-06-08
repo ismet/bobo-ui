@@ -302,8 +302,8 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       const capex = p.capacity * 1000 * batteryCostPerKWh;
       const annualCapex = capex * crf;
       const netAnnual = annualUplift - annualCapex;
-      // Simple payback uses year-1 (no-fade) cash flow — comparable across runs.
-      const simplePayback = yearOneUplift > 0 ? capex / yearOneUplift : Infinity;
+      // Simple payback uses levelised annual uplift (with fade & NPV).
+      const simplePayback = annualUplift > 0 ? capex / annualUplift : Infinity;
       return {
         ...p,
         annualRevenue, yearOneUplift, annualUplift,
@@ -466,7 +466,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
               </div>
 
               {/* Investment KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+              <div className="grid grid-cols-2 gap-3 mb-5">
                 <div className="card-flush p-4" style={{ borderRadius: 4 }}>
                   <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Cost per MWh</div>
                   <div className="num text-lg font-display text-[color:var(--accent-amber)]">
@@ -482,18 +482,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                       <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Optimal capacity</div>
                       <div className="num text-lg font-display text-[color:var(--accent-green)]">
                         {netOptimum.capacity.toFixed(1)} MWh
-                      </div>
-                      <div className="text-[10px] font-mono text-[color:var(--text-dim)] mt-1">
-                        max net annual benefit
-                      </div>
-                    </div>
-                    <div className="card-flush p-4" style={{ borderRadius: 4 }}>
-                      <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-1">Net annual benefit</div>
-                      <div className="num text-lg font-display text-[color:var(--accent-green)]">
-                        {fmtMoney(netOptimum.netAnnual)}/yr
-                      </div>
-                      <div className="text-[10px] font-mono text-[color:var(--text-dim)] mt-1">
-                        payback ≈ {isFinite(netOptimum.simplePayback) ? netOptimum.simplePayback.toFixed(1) + ' yr' : '—'}
                       </div>
                     </div>
                   </>
