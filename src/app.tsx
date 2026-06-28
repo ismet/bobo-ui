@@ -106,6 +106,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   // Loaded price & generation series (null = no data loaded) (draft)
   const [customData, setCustomData] = useState<SeriesData | null>(null);
   const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null); // (draft)
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null); // (draft)
   const initialBoboDateRange = useMemo(() => boboDefaultDateRange(), []);
   const [boboStartDate, setBoboStartDate] = useState(initialBoboDateRange.startDate); // (draft)
   const [boboEndDate, setBoboEndDate] = useState(initialBoboDateRange.endDate); // (draft)
@@ -133,6 +134,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const [appliedLifetimeYears, setAppliedLifetimeYears] = useState<number | null>(null);
   const [appliedYearOneFadePct, setAppliedYearOneFadePct] = useState<number | null>(null);
   const [appliedLongTermFadePct, setAppliedLongTermFadePct] = useState<number | null>(null);
+  const [appliedRegion, setAppliedRegion] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   /** Bumped only after a successful optimize commit; drives deferred overlay dismiss after charts paint. */
   const [optimizeOverlayDismissTick, setOptimizeOverlayDismissTick] = useState(0);
@@ -163,6 +165,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       'v1',
       seriesKey,
       selectedPlantId ?? '',
+      selectedRegion ?? '',
       boboStartDate,
       boboEndDate,
       capacity,
@@ -191,6 +194,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   }, [
     customData,
     selectedPlantId,
+    selectedRegion,
     boboStartDate,
     boboEndDate,
     capacity,
@@ -299,6 +303,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     setAppliedLifetimeYears(null);
     setAppliedYearOneFadePct(null);
     setAppliedLongTermFadePct(null);
+    setAppliedRegion(null);
     setSweepOptimalResult(null);
   }, []);
 
@@ -462,6 +467,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     const snapLifetimeYears = lifetimeYears;
     const snapYearOneFadePct = yearOneFadePct;
     const snapLongTermFadePct = longTermFadePct;
+    const snapSelectedRegion = selectedRegion;
 
     const snapPvReconstructEnabled = pvReconstructEnabled;
     const snapClippingLimitMW = clippingLimitMW;
@@ -563,6 +569,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       setAppliedLifetimeYears(snapLifetimeYears);
       setAppliedYearOneFadePct(snapYearOneFadePct);
       setAppliedLongTermFadePct(snapLongTermFadePct);
+      setAppliedRegion(snapSelectedRegion);
       setAppliedResult(applied);
       // New optimize commit invalidates any cached sweep optimum.
       setSweepOptimalResult(null);
@@ -676,6 +683,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                 onApplyPlantRange={handleApplyPlantRange}
                 canApplyPlantRange={hasUnappliedChanges}
                 boboSeriesError={boboSeriesError}
+                selectedRegion={selectedRegion}
+                onPickRegion={setSelectedRegion}
               />
               <div className="mt-6 card p-5">
                 <div>
@@ -876,7 +885,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     ? 'Press Optimize to run dispatch.'
                     : 'Load price & generation data, then optimize.'} />
               {spotWindChartProps && <ChartsPanel {...spotWindChartProps} />}
-              {appliedResult && <KPIRow result={appliedResult} />}
+              {appliedResult && <KPIRow result={appliedResult} region={appliedRegion} />}
               {appliedResult && <PvGenerationCompareChart result={appliedResult} />}
               {appliedResult && (
                 <>

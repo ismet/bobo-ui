@@ -3,6 +3,7 @@
 // ============================================================================
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { type PredefinedDateRange, PREDEFINED_DATE_RANGES, computePredefinedRange } from '../formatUtils';
+import tariffs from '../../teias_tariff_dataset.json';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 
 export type PowerPlantRow = { id: string | number; name?: string };
@@ -140,10 +141,143 @@ export function PowerPlantCombobox({
   );
 }
 
+export const PlantProvinceCombobox = memo(({
+  selectedRegion, onPickRegion
+}: {
+  selectedRegion: string | null;
+  onPickRegion: (v: string | null) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [hi, setHi] = useState(0);
+  const [pickedProvince, setPickedProvince] = useState<string | null>(null);
+  const lastSentRegion = useRef<string | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const provinces = useMemo(() => {
+    return Object.entries(tariffs.province_to_region_map)
+      .sort(([a], [b]) => a.localeCompare(b, 'tr'))
+      .map(([province, region]) => ({ province, region: String(region) }));
+  }, []);
+
+  useEffect(() => {
+    if (selectedRegion !== lastSentRegion.current) {
+      setPickedProvince(null);
+    }
+  }, [selectedRegion]);
+
+  const selectedProvince = useMemo(() => {
+    if (pickedProvince) return pickedProvince;
+    if (!selectedRegion) return null;
+    return provinces.find(p => p.region === selectedRegion)?.province ?? null;
+  }, [provinces, selectedRegion, pickedProvince]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return provinces;
+    return provinces.filter(p => p.province.toLowerCase().includes(q));
+  }, [provinces, query]);
+
+  useEffect(() => {
+    setHi(h => (filtered.length ? Math.min(h, filtered.length - 1) : 0));
+  }, [filtered.length]);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && e.target instanceof Node && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const pick = (province: string) => {
+    const region = provinces.find(p => p.province === province)?.region ?? null;
+    setPickedProvince(province);
+    lastSentRegion.current = region;
+    setOpen(false);
+    setQuery('');
+    onPickRegion(region);
+  };
+
+  const onInputFocus = () => {
+    setOpen(true);
+    setQuery(selectedProvince ?? '');
+    setHi(0);
+  };
+
+  const onInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+    setOpen(true);
+    setHi(0);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+      setOpen(true);
+      return;
+    }
+    if (!open) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHi(i => Math.min(i + 1, Math.max(0, filtered.length - 1)));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHi(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && filtered.length) {
+      e.preventDefault();
+      pick(filtered[hi].province);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="mb-4">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-2">Plant province (for regional tariffs)</div>
+      <div className="pp-combobox" ref={wrapRef}>
+        <div className="pp-combobox-input-wrap">
+          <input
+            type="text"
+            autoComplete="off"
+            placeholder="— select province —"
+            value={open ? query : (selectedProvince ?? query)}
+            onFocus={onInputFocus}
+            onChange={onInputChange}
+            onKeyDown={onKeyDown}
+            aria-expanded={open}
+            aria-autocomplete="list"
+          />
+        </div>
+        {open && filtered.length > 0 && (
+          <div className="pp-combobox-list" role="listbox">
+            {filtered.map((p, i) => (
+              <button key={p.province} type="button" role="option"
+                aria-selected={i === hi}
+                className="pp-combobox-item"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}
+                onMouseEnter={() => setHi(i)}
+                onClick={() => pick(p.province)}>
+                <span>{p.province}</span>
+                <span className="text-[10px] text-[color:var(--text-faint)] font-mono">region {p.region}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {selectedRegion && (
+        <div className="text-[10px] text-[color:var(--text-faint)] mt-1 font-mono">
+          TEİAŞ region {selectedRegion}
+        </div>
+      )}
+    </div>
+  );
+});
+
 export const DataInputCard = memo(({
   customData,
   powerPlants, plantsLoading, plantsError,
   seriesLoading, selectedPlantId, onPickPlant,
+  selectedRegion, onPickRegion,
   boboStartDate, boboEndDate, onBoboStartDateChange, onBoboEndDateChange,
   selectedDateRange, setSelectedDateRange,
   onApplyPlantRange, canApplyPlantRange,
@@ -156,6 +290,8 @@ export const DataInputCard = memo(({
   seriesLoading: boolean;
   selectedPlantId: string | null;
   onPickPlant: (id: string | number) => void;
+  selectedRegion: string | null;
+  onPickRegion: (v: string | null) => void;
   boboStartDate: string;
   boboEndDate: string;
   onBoboStartDateChange: (value: string) => void;
@@ -204,6 +340,10 @@ export const DataInputCard = memo(({
         seriesLoading={seriesLoading}
         selectedPlantId={selectedPlantId}
         onPickPlant={onPickPlant}
+      />
+      <PlantProvinceCombobox
+        selectedRegion={selectedRegion}
+        onPickRegion={onPickRegion}
       />
       <div className="mb-4">
         <div className="grid grid-cols-3 gap-3">

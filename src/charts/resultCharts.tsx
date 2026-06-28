@@ -1,9 +1,10 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, type ReactNode } from 'react';
 import {
   Area, Bar, BarChart, Brush, CartesianGrid, ComposedChart, Line,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { fmtMoney, fmtNumber, plotAll, tsLabel } from '../formatUtils';
+import { fmtMoney, fmtNumber, plotAll, tsLabel, DEFAULT_TS_EPOCH_MS } from '../formatUtils';
+import { computeTariffBreakdown } from '../finance';
 import { LegendChip, useIsolation, useZoom, ZoomBadge } from './chartInteractions';
 import { KPI, Tip } from '../uiPrimitives';
 import type { OptimizationRunResult } from '../optimizationTypes';
@@ -55,7 +56,27 @@ export function Footer() {
   );
 }
 
-export const KPIRow = memo(({ result }: { result: OptimizationRunResult }) => {
+function FinancialBreakdownCell({ label, value, tone }: {
+  label: string;
+  value: string;
+  tone: 'teal' | 'green' | 'rose' | 'faint';
+}) {
+  const toneClass = tone === 'teal' ? 'text-[color:var(--accent-teal)]'
+                  : tone === 'green' ? 'text-[color:var(--accent-green)]'
+                  : tone === 'rose' ? 'text-[color:var(--accent-rose)]'
+                  : 'text-[color:var(--text-faint)]';
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--text-faint)] font-mono leading-none mb-0.5">{label}</div>
+      <div className={`num text-xl font-display font-semibold ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+export const KPIRow = memo(({ result, region }: {
+  result: OptimizationRunResult;
+  region: string | null;
+}) => {
   const { traj, dt } = result;
   const stats = useMemo(() => {
     let totalRev = 0, windOnlyRev = 0;
@@ -107,27 +128,83 @@ export const KPIRow = memo(({ result }: { result: OptimizationRunResult }) => {
              avgSellPrice, avgBuyPrice, avgPrice, spread };
   }, [traj, result.params.capacity, dt]);
 
+  const breakdown = useMemo(() => {
+    const gross = traj.reduce((s, r) => s + r.windOnlyRevenue, 0);
+    const hybrid = traj.reduce((s, r) => s + r.revenue, 0);
+    if (!region) {
+      return {
+        grossRevenueEUR: gross,
+        oAndMEUR: null as number | null,
+        transmissionEUR: null as number | null,
+        netRevenueEUR: null as number | null,
+        incrementalEUR: hybrid - gross,
+      };
+    }
+    const b = computeTariffBreakdown({
+      traj: result.traj,
+      dt: result.dt,
+      periodStartMs: result.chartEpochUtcMs ?? DEFAULT_TS_EPOCH_MS,
+      region: Number(region),
+      installedMW: result.params.installedCapacityMW
+                    ?? Math.max(result.params.chargeMax, result.params.dischargeMax),
+    });
+    return {
+      grossRevenueEUR: b.grossRevenueEUR,
+      oAndMEUR: b.oAndMEUR,
+      transmissionEUR: b.transmissionEUR,
+      netRevenueEUR: b.netRevenueEUR,
+      incrementalEUR: b.incrementalEUR,
+    };
+  }, [traj, result, region]);
+
+  const incrValue = breakdown.incrementalEUR;
+  let incrPct: number | null = null;
+  let incrSub: ReactNode = result.dateRangeLabel;
+  if (region && breakdown.netRevenueEUR != null && breakdown.netRevenueEUR > 0) {
+    incrPct = (breakdown.incrementalEUR / breakdown.netRevenueEUR) * 100;
+    incrSub  = `${incrPct >= 0 ? '+' : ''}${incrPct.toFixed(1)}% vs net plant`;
+  } else if (!region && stats.windOnlyRev > 0) {
+    incrPct = (breakdown.incrementalEUR / stats.windOnlyRev) * 100;
+    incrSub  = `${incrPct >= 0 ? '+' : ''}${incrPct.toFixed(1)}% vs baseline`;
+  }
+  const incrDelta = incrPct ?? undefined;
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
       <KPI label="Hybrid revenue (optimized dispatch)"  value={fmtMoney(stats.totalRev)}
            sub={result.dateRangeLabel} tone="teal"/>
-      <KPI label="Plant-only revenue" value={fmtMoney(stats.windOnlyRev)}
-           sub="no BESS" tone="amber"/>
-      <KPI label="Incremental revenue from BESS" value={fmtMoney(stats.uplift)}
-           sub={`${stats.upliftPct >= 0 ? '+' : ''}${stats.upliftPct.toFixed(1)}% vs baseline`}
-           tone="green" delta={stats.upliftPct}/>
+      <KPI
+        label="Revenue"
+        value={
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 -mt-2">
+            <FinancialBreakdownCell label="Gross Revenue" tone="teal"
+              value={fmtMoney(breakdown.grossRevenueEUR)} />
+            <FinancialBreakdownCell label="NET Revenue"
+              tone={breakdown.netRevenueEUR == null ? 'faint'
+                  : breakdown.netRevenueEUR >= 0 ? 'green' : 'rose'}
+              value={breakdown.netRevenueEUR == null ? '—' : fmtMoney(breakdown.netRevenueEUR)} />
+          </div>
+        }
+      />
+      <KPI
+        label="Costs"
+        value={
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 -mt-2">
+            <FinancialBreakdownCell label="O&M Cost" tone="rose"
+              value={breakdown.oAndMEUR == null ? '—' : fmtMoney(breakdown.oAndMEUR)} />
+            <FinancialBreakdownCell label="Transmission Cost" tone="rose"
+              value={breakdown.transmissionEUR == null ? '—' : fmtMoney(breakdown.transmissionEUR)} />
+          </div>
+        }
+      />
+      <KPI label="Incremental revenue from BESS" value={fmtMoney(incrValue)}
+           sub={incrSub} tone="green" delta={incrDelta}/>
       <KPI label="Avg. selling price"
            value={stats.avgSellPrice != null ? `€${stats.avgSellPrice.toFixed(2)}` : '—'}
            sub={stats.avgSellPrice != null
-                  ? `${stats.exportEnergy.toFixed(0)} MWh sold · ${(stats.avgSellPrice - stats.avgPrice >= 0 ? '+' : '')}€${(stats.avgSellPrice - stats.avgPrice).toFixed(2)} vs avg`
-                  : 'no exports'}
+                   ? `${stats.exportEnergy.toFixed(0)} MWh sold · ${(stats.avgSellPrice - stats.avgPrice >= 0 ? '+' : '')}€${(stats.avgSellPrice - stats.avgPrice).toFixed(2)} vs avg`
+                   : 'no exports'}
            tone="teal"/>
-      <KPI label="Avg. buying price"
-           value={stats.avgBuyPrice != null ? `€${stats.avgBuyPrice.toFixed(2)}` : '—'}
-           sub={stats.avgBuyPrice != null
-                  ? `${stats.importEnergy.toFixed(0)} MWh bought · ${(stats.avgBuyPrice - stats.avgPrice >= 0 ? '+' : '')}€${(stats.avgBuyPrice - stats.avgPrice).toFixed(2)} vs avg`
-                  : 'no imports'}
-           tone="rose"/>
       <KPI label="Equivalent full cycles" value={stats.cycles.toFixed(1)}
            sub={`${stats.chargeHours.toFixed(0)} h charge · ${stats.dischargeHours.toFixed(0)} h discharge · utilization`} tone="violet"/>
     </div>
@@ -463,7 +540,7 @@ export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) 
             swatch={<span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--accent-amber)' }}></span>}/>
           <LegendChip iso={iso} isoKey="total" label="plant + battery"
             swatch={<span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--accent-teal)' }}></span>}/>
-          <LegendChip iso={iso} isoKey="uplift" label="uplift"
+          <LegendChip iso={iso} isoKey="uplift" label="marginal benefit"
             swatch={<span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--accent-green)' }}></span>}/>
         </div>
       </div>
@@ -481,7 +558,7 @@ export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) 
                    minTickGap={60} stroke="var(--text-faint)"/>
             <YAxis stroke="var(--text-faint)" tickFormatter={v => fmtMoney(v)} width={60}/>
             <Tooltip content={<Tip labelFormatter={i => tsLabel(traj[Math.min(Number(i), traj.length-1)].t * dt, showTime, result.chartEpochUtcMs)}/>}/>
-            <Area type="monotone" dataKey="uplift" name="uplift (€)" hide={!iso.active('uplift')}
+            <Area type="monotone" dataKey="uplift" name="marginal benefit (€)" hide={!iso.active('uplift')}
                   fill="url(#upliftGrad)" stroke="var(--accent-green)" strokeWidth={1}/>
             <Line type="monotone" dataKey="windOnly" name="generation-only (€)" hide={!iso.active('windOnly')}
                   stroke="var(--accent-amber)" dot={false} strokeWidth={1.4}/>
