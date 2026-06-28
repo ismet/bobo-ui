@@ -845,6 +845,9 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                 setLifetimeYears={setLifetimeYears}
                 crf={crf}
                 capacity={capacity}
+                boboStartDate={boboStartDate}
+                boboEndDate={boboEndDate}
+                selectedRegion={selectedRegion}
               />
               <DegradationCard
                 wearCost={wearCost} setWearCost={setWearCost}

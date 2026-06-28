@@ -75,7 +75,7 @@ export function boboDefaultDateRange(): { startDate: string; endDate: string } {
   end.setHours(0, 0, 0, 0);
   end.setDate(end.getDate() - 1);
   const start = new Date(end);
-  start.setDate(start.getDate() - 7);
+  start.setDate(start.getDate() - 6);
   return { startDate: formatLocalYMD(start), endDate: formatLocalYMD(end) };
 }
 
@@ -98,7 +98,7 @@ export function computePredefinedRange(key: PredefinedDateRange): { startDate: s
   const days: Record<PredefinedDateRange, number> = {
     '1w': 7, '1m': 30, '3m': 90, '6m': 180, '1y': 365, '2y': 730,
   };
-  start.setDate(start.getDate() - days[key]);
+  start.setDate(start.getDate() - (days[key] - 1));
   return { startDate: formatLocalYMD(start), endDate: formatLocalYMD(end) };
 }
 
