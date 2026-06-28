@@ -14,7 +14,7 @@ import type { Trajectory } from '../engine/types';
 //   uncontrolled_power · generation_measured_mw · generation_reconstructed_mw (PV recon only) ·
 //   next_soc_mwh · surplus · throughput_mwh · wear_cost ·
 //   current_benefit · net_benefit · cumulative_net_benefit · cumulative_benefit ·
-//   wind_only_revenue · uplift_vs_wind_only · price
+//   wind_only_revenue · marginal_benefit_vs_wind_only · price
 // ============================================================================
 type OpRow = Record<string, string | number>;
 
@@ -27,7 +27,7 @@ const BASE_OPERATION_COLS = [
   'throughput_mwh', 'wear_cost',
   'current_benefit', 'net_benefit',
   'cumulative_net_benefit', 'cumulative_benefit',
-  'wind_only_revenue', 'uplift_vs_wind_only',
+  'wind_only_revenue', 'marginal_benefit_vs_wind_only',
   'price',
 ] as const;
 
@@ -124,7 +124,7 @@ function buildOperationTable(result: OptimizationRunResult): OpRow[] {
       cumulative_net_benefit: +cumNetBenefit.toFixed(4),
       cumulative_benefit: +cumBenefit.toFixed(4),
       wind_only_revenue: windOnlyRevenue,
-      uplift_vs_wind_only: upliftVsWindOnly,
+      marginal_benefit_vs_wind_only: upliftVsWindOnly,
       price: r.price,
     };
     if (showPvGeneration) {
@@ -233,7 +233,7 @@ export const OutputTable = memo(({ result, sweepResult }: {
     if (col === 'cumulative_benefit' || col === 'cumulative_net_benefit' ||
         col === 'current_benefit' || col === 'net_benefit' ||
         col === 'wear_cost' || col === 'wind_only_revenue' ||
-        col === 'uplift_vs_wind_only') return v.toFixed(2);
+        col === 'marginal_benefit_vs_wind_only') return v.toFixed(2);
     // €/MWh: 2 decimals
     if (col === 'price') return v.toFixed(2);
     // SOC %: 2 decimals (already rounded)
@@ -403,8 +403,8 @@ export const OutputTable = memo(({ result, sweepResult }: {
                     color = 'var(--accent-rose)';
                   else if (c === 'price') color = 'var(--accent-amber)';
                   else if (c === 'wear_cost' && n > 0) color = 'var(--accent-rose)';
-                  else if (c === 'uplift_vs_wind_only' && n > 0) color = 'var(--accent-teal)';
-                  else if (c === 'uplift_vs_wind_only' && n < 0) color = 'var(--accent-rose)';
+                  else if (c === 'marginal_benefit_vs_wind_only' && n > 0) color = 'var(--accent-teal)';
+                  else if (c === 'marginal_benefit_vs_wind_only' && n < 0) color = 'var(--accent-rose)';
                   else if (c === 'soc_pct') color = 'var(--accent-violet)';
                   else if (c === 'surplus' && n > 0) color = 'var(--accent-amber)';
                   return (

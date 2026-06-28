@@ -389,7 +389,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Sizing &amp; dispatch sweep</div>
-          <div className="font-display text-lg">Revenue uplift vs installed MWh</div>
+          <div className="font-display text-lg">Revenue marginal benefit vs installed MWh</div>
           <div className="text-xs font-mono text-[color:var(--text-dim)] mt-1">
             {currentSweepPointCount} points from 0 to {(baseParams.capacity * maxCapacityX).toFixed(0)} MWh
           </div>
@@ -496,7 +496,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                     </div>
                     <div className="text-xs font-mono text-[color:var(--text-dim)]" style={{ lineHeight: 1.5 }}>
                       At {batteryCostPerKWh} €/kWh and {interestRatePct}% interest, annualised CAPEX
-                      exceeds optimized uplift at every swept capacity. Try reducing battery
+                      exceeds optimized marginal benefit at every swept capacity. Try reducing battery
                       cost, lengthening lifetime, or extending the horizon to a full year.
                     </div>
                   </div>
@@ -551,7 +551,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                               display: 'grid', gridTemplateColumns: 'auto auto',
                               gap: '2px 16px'
                             }}>
-                              <span style={{ color: 'var(--accent-teal)' }}>annual uplift</span>
+                              <span style={{ color: 'var(--accent-teal)' }}>annual marginal benefit</span>
                               <span style={{ textAlign: 'right' }}>{fmtMoney(p.annualUplift)}</span>
                               <span style={{ color: 'var(--accent-amber)' }}>annual capex</span>
                               <span style={{ textAlign: 'right' }}>−{fmtMoney(p.annualCapex)}</span>
@@ -574,7 +574,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                       }}
                     />
                     <ReferenceLine y={0} stroke="var(--border-strong)" strokeDasharray="3 3" />
-                    <Line type="monotone" dataKey="annualUplift" name="annual uplift"
+                    <Line type="monotone" dataKey="annualUplift" name="annual marginal benefit"
                       stroke="var(--accent-teal)" strokeWidth={1.5}
                       strokeDasharray="4 4"
                       dot={{ fill: 'var(--accent-teal)', r: 2, strokeWidth: 0 }} />
@@ -622,7 +622,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                     height: 1.5, background: 'var(--accent-teal)',
                     backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-teal) 0 4px, transparent 4px 8px)'
                   }}></span>
-                  annual uplift (revenue)
+                  annual marginal benefit (revenue)
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-3" style={{
@@ -743,7 +743,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                 </div>
 
                 <div className="card-flush p-4" style={{ borderRadius: 4 }}>
-                  <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-2">Yearly uplift (nominal vs discounted)</div>
+                  <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--text-faint)] font-mono mb-2">Yearly marginal benefit (nominal vs discounted)</div>
                   <div style={{ width: '100%', height: 220 }}>
                     <ResponsiveContainer>
                       <ComposedChart data={breakdownRows} margin={{ top: 8, right: 12, left: -8, bottom: 4 }}>
@@ -779,7 +779,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                     </ResponsiveContainer>
                   </div>
                   <div className="text-[10px] text-[color:var(--text-faint)] mt-2" style={{ lineHeight: 1.5 }}>
-                    Amber: cash uplift before discount · Green: contribution after discounting at {interestRatePct}%
+                    Amber: cash marginal benefit before discount · Green: contribution after discounting at {interestRatePct}%
                   </div>
                 </div>
               </div>
@@ -850,7 +850,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                       <tr style={{ background: 'var(--surface-2)', fontWeight: 600 }}>
                         <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-dim)' }}>Σ</td>
                         <td colSpan={3} style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-faint)' }}>
-                          Present value of uplift stream:
+                          Present value of marginal benefit stream:
                         </td>
                         <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--accent-green)' }}>
                           {fmtMoney(breakdownRows[breakdownRows.length - 1].cumDiscRev)}
