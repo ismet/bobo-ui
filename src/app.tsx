@@ -13,6 +13,7 @@ import {
   PriceDurationCurve,
   ActionHistogram,
   PvGenerationCompareChart,
+  TotalGenerationCard,
   UpliftChart,
 } from './charts/resultCharts';
 import { DataInputCard, type PowerPlantRow } from './panels/dataInputPanels';
@@ -888,6 +889,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     ? 'Press Optimize to run dispatch.'
                     : 'Load price & generation data, then optimize.'} />
               {spotWindChartProps && <ChartsPanel {...spotWindChartProps} />}
+              {customData && <TotalGenerationCard customData={customData} appliedResult={appliedResult} />}
               {appliedResult && <KPIRow result={appliedResult} region={appliedRegion} />}
               {appliedResult && <PvGenerationCompareChart result={appliedResult} />}
               {appliedResult && (

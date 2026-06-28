@@ -59,9 +59,10 @@ export function Footer() {
 function FinancialBreakdownCell({ label, value, tone }: {
   label: string;
   value: string;
-  tone: 'teal' | 'green' | 'rose' | 'faint';
+  tone: 'teal' | 'amber' | 'green' | 'rose' | 'faint';
 }) {
   const toneClass = tone === 'teal' ? 'text-[color:var(--accent-teal)]'
+                  : tone === 'amber' ? 'text-[color:var(--accent-amber)]'
                   : tone === 'green' ? 'text-[color:var(--accent-green)]'
                   : tone === 'rose' ? 'text-[color:var(--accent-rose)]'
                   : 'text-[color:var(--text-faint)]';
@@ -85,15 +86,19 @@ export const KPIRow = memo(({ result, region }: {
     let chargeHours = 0, dischargeHours = 0, idleHours = 0;
     let batteryThroughputMWh = 0;
     let priceSum = 0;
+    let windEnergyMWh = 0;
+    let hybridExportMWh = 0;
     for (const r of traj) {
       totalRev += r.revenue;
       windOnlyRev += r.windOnlyRevenue;
       priceSum += r.price;
       // gridTotal is MW; energy this step = gridTotal * dt (MWh)
       const stepEnergy = r.gridTotal * dt;
+      windEnergyMWh += r.wind * dt;
       if (stepEnergy > 0) {
-        exportEnergy  += stepEnergy;
-        exportRevenue += stepEnergy * r.price;        // € received
+        exportEnergy    += stepEnergy;
+        exportRevenue   += stepEnergy * r.price;        // € received
+        hybridExportMWh += stepEnergy;
       } else if (stepEnergy < 0) {
         importEnergy += -stepEnergy;
         importCost   += -stepEnergy * r.price;        // € paid (positive)
@@ -125,6 +130,7 @@ export const KPIRow = memo(({ result, region }: {
     return { totalRev, windOnlyRev, uplift, upliftPct, cycles,
              chargeHours, dischargeHours, idleHours,
              exportEnergy, importEnergy,
+             windEnergyMWh, hybridExportMWh,
              avgSellPrice, avgBuyPrice, avgPrice, spread };
   }, [traj, result.params.capacity, dt]);
 
@@ -207,6 +213,67 @@ export const KPIRow = memo(({ result, region }: {
            tone="teal"/>
       <KPI label="Equivalent full cycles" value={stats.cycles.toFixed(1)}
            sub={`${stats.chargeHours.toFixed(0)} h charge · ${stats.dischargeHours.toFixed(0)} h discharge · utilization`} tone="violet"/>
+    </div>
+  );
+});
+
+// Total generation summary — visible as soon as data is loaded, even before
+// optimization. "Plant only" derives directly from the input wind series; the
+// "With BESS" cell populates once an optimize run lands.
+export const TotalGenerationCard = memo(({
+  customData,
+  appliedResult,
+}: {
+  customData: { wind: number[] } | null;
+  appliedResult: OptimizationRunResult | null;
+}) => {
+  const { windEnergyMWh, hybridExportMWh } = useMemo(() => {
+    const dt = 1.0;
+    const wind = customData?.wind ?? [];
+    let wMwh = 0;
+    for (const w of wind) wMwh += w * dt;
+
+    let hMwh = 0;
+    if (appliedResult) {
+      const tdt = appliedResult.dt;
+      for (const r of appliedResult.traj) {
+        const e = r.gridTotal * tdt;
+        if (e > 0) hMwh += e;
+      }
+    }
+    return { windEnergyMWh: wMwh, hybridExportMWh: hMwh };
+  }, [customData, appliedResult]);
+
+  if (!customData) return null;
+
+  const battContributionMWh = hybridExportMWh - windEnergyMWh;
+  const battContributionPct = windEnergyMWh > 0
+    ? (battContributionMWh / windEnergyMWh) * 100
+    : 0;
+  const sign = battContributionMWh >= 0 ? '+' : '−';
+  const absMwh = Math.round(Math.abs(battContributionMWh)).toLocaleString();
+  const fmtMwh = (v: number) => Math.round(v).toLocaleString();
+
+  return (
+    <div className="mb-6">
+      <KPI
+        label="Total generation"
+        value={
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 -mt-2">
+            <FinancialBreakdownCell label="Plant only" tone="amber"
+              value={`${fmtMwh(windEnergyMWh)} MWh`} />
+            <FinancialBreakdownCell label="With BESS" tone="teal"
+              value={appliedResult ? `${fmtMwh(hybridExportMWh)} MWh` : '—'} />
+          </div>
+        }
+        sub={
+          windEnergyMWh > 0
+            ? appliedResult
+              ? `${sign}${absMwh} MWh (${sign}${Math.abs(battContributionPct).toFixed(1)}%) from BESS`
+              : 'Optimize to see BESS contribution'
+            : 'no generation loaded'
+        }
+      />
     </div>
   );
 });
