@@ -18,7 +18,7 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
 ## Tooling & verification
 
 - **Typecheck** (no npm script): `npx tsc --noEmit -p tsconfig.json` covers `src/` + `scripts/`; `npx tsc --noEmit -p tsconfig.node.json` covers `vite.config.ts` and `scripts/**/*.ts`. Both configs are `strict`, `noEmit`. Run both before claiming a change compiles.
-- **Smoke test**: `node scripts/verify-ui.mjs` — Playwright script, not in `package.json`. Needs `playwright` installed separately and a dev/preview server on `127.0.0.1:5173`. Hits `/api/power-plants`, then drives paste → PV ON → optimize, asserts horizon trim + KPI visibility + interval count. Expects exactly **1416 intervals** from 1422 input hours with PV on (6 dropped to make 59 full days).
+- **Smoke test**: `node scripts/verify-ui.mjs` — Playwright script, not in `package.json`. Needs `playwright` installed separately and a dev/preview server on `127.0.0.1:5173`. **Currently broken: it drives a paste / "Load data" flow that no longer exists** (the app loads only via EPİAŞ). The /api/power-plants fetch and the 1416-interval horizon-trim math (1422 h → 1416 h with PV on) are still valid reference values. Update the script before relying on it.
 - **No CI, no pre-commit hooks, no husky.** No `.github/` directory. Don't expect a status check on PRs.
 - **Search workflow**: Prefer `Read` and `Grep` over `cd`/`find`/`rg` to discover behavior.
 
@@ -33,25 +33,27 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
 | `src/engine/` | DP solver (`runOptimization.ts`), worker bridge (`optimizationRunner.ts`, `optimizationWorker.ts`), `types.ts`, PV recon (`reconstructGeneration.ts`) |
 | `src/data/` | `api.ts` (API base URL) |
 | `src/charts/` | `resultCharts.tsx` (Header, Footer, all result charts), `capacitySweepChart.tsx`, `chartInteractions.tsx` (brush zoom, legend isolation) |
-| `src/panels/` | `dataInputPanels.tsx`, `economicsDegradation.tsx` |
+| `src/panels/` | `dataInputPanels.tsx`, `economicsDegradation.tsx`, `pvReconstructCard.tsx` |
 | `src/tables/outputTable.tsx` | Paginated operation table + CSV |
 | `src/uiPrimitives.tsx` | `SectionHeader`, `NumberInput`, `KPI`, `Tip` |
-| `src/formatUtils.ts` | Formatting, `parsePaste`, `alignPriceWindSeries`, `normalizePowerPlantsPayload`, chart timestamps |
+| `src/formatUtils.ts` | Formatting, `alignPriceWindSeries`, `normalizePowerPlantsPayload`, chart timestamps, `peakGenerationMW`, `fingerprintSeriesSample`, `boboDefaultDateRange` |
+| `src/finance.ts` | EPİAŞ tariff + EUR/TRY FX net-revenue math (`computeTariffBreakdown`, `getTariffRatesForRange`, `getFxRatesForRange`) over `teias_tariff_dataset.json` + `eur_try.json` |
 | `src/optimizationTypes.ts` | `OptimizationRunResult` bundle |
 | `src/fullScreenJobOverlay.tsx` | Blocking overlay during optimize / plant fetch / sweep |
 | `src/vite-env.d.ts` | `ImportMetaEnv.VITE_AUTH_USERS` typing |
 | `css/utilities.css`, `css/theme.css` | Utility classes + design tokens |
+| `teias_tariff_dataset.json`, `eur_try.json` | Static reference data imported by `src/finance.ts` (committed). |
 | `scripts/` | `benchmark-dp.ts`, `dp-worker-thread.ts`, `verify-ui.mjs` |
 | `render.yaml` | Render static site (`bataryaopt`). `package.json` name is `epias-frontend` — the two differ. |
-| **Large files** (use `Read` with offset) | `src/app.tsx` 989 · `src/charts/capacitySweepChart.tsx` 880 · `src/charts/resultCharts.tsx` 600 · `src/panels/dataInputPanels.tsx` 273 lines |
+| **Large files** (use `Read` with offset) | `src/app.tsx` 1044 · `src/charts/capacitySweepChart.tsx` 1030 · `src/charts/resultCharts.tsx` 800 · `src/panels/economicsDegradation.tsx` 784 · `src/panels/dataInputPanels.tsx` 413 lines |
 
 ## Architecture
 
 - **State**: `useState` / `useCallback` / `useMemo` / `useEffect` in `app.tsx` — no external state library.
-- **Draft vs applied**: Sidebar inputs are **draft** until the user clicks **Optimize dispatch**. Charts, KPIs, and the operation table read **`appliedResult`** (and the applied economics fields: `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct`, and a derived `appliedCrf`). Changing draft values without optimizing does not move result charts. `sweepOptimalResult` is set by `CapacitySweepChart` when a sizing sweep completes (not by `optimize()`) and is cleared by `clearAppliedSnapshot` (`app.tsx:295`) whenever `customData` or sidebar params change, so the OutputTable reverts to `appliedResult` and never shows a stale sweep optimum.
-- **Auto-sizing**: on every new `customData`, `capacity`, `chargeMax`, `dischargeMax`, and `installedCapacityMW` are all auto-snapshotted to `peakGenerationMW(wind)`. `NumberInput` `max` is `max(100, ceil(peak × 1.25))`. The user can still override any value; the auto-set only fires on data load.
+- **Draft vs applied**: Sidebar inputs are **draft** until the user clicks **Optimize dispatch**. Charts, KPIs, and the operation table read **`appliedResult`** (and the applied economics fields: `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct`, `appliedOpexPctPlantOnly`, `appliedOpexPctBess`, and a derived `appliedCrf`). Changing draft values without optimizing does not move result charts. `sweepOptimalResult` is set by `CapacitySweepChart` when a sizing sweep completes (not by `optimize()`) and is cleared by `clearAppliedSnapshot` (`app.tsx:311`) whenever `customData` or sidebar params change, so the OutputTable reverts to `appliedResult` and never shows a stale sweep optimum.
+- **Auto-sizing**: on every new `customData`, `capacity`, `chargeMax`, `dischargeMax`, and `installedCapacityMW` are all auto-snapshotted to `peakGenerationMW(wind)`. Sidebar `NumberInput` `max` is `max(100, ceil(peak × 1.25))` for power / capacity inputs and `max(200, ceil(peak × 1.25))` for the **Installed capacity (wind/solar)** slider (`powerSliderMax` / `installedSliderMax` at `app.tsx:434-435`). The user can still override any value; the auto-set only fires on data load.
 - **Authentication** (build-time gate):
-  - `VITE_AUTH_USERS` is a **build-time** JSON array of `{ username, password }`. `.env.example` is the committed template; `.env.local` is gitignored and holds the real list.
+  - `VITE_AUTH_USERS` is a **build-time** JSON array of `{ username, password }`. `.env.example` is the committed template; `.env` and `.env.local` are gitignored and hold local-only `VITE_AUTH_USERS`.
   - `src/Root.tsx` renders `LoginPage` until `isLoggedIn()`; on success renders `<App onLogout=…/>`.
   - **Idle timeout 10 min** (`IDLE_TIMEOUT_MS = 10 × 60 × 1000`). Activity tracked on `mousedown / keydown / scroll / touchstart` + `visibilitychange`; re-checked every 30 s.
   - `App` accepts optional `onLogout?: () => void`; `Header` shows a "Log out" chip when provided.
@@ -64,9 +66,9 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
     - **Production build:** `https://bobo-api.onrender.com` unless `VITE_BOBO_API_BASE` is set at build time
   - `GET /power-plants` → plant list. Payload normalized by `normalizePowerPlantsPayload()` in `formatUtils.ts` (top-level array, or `{ data }`, `{ power_plants }`, `{ plants }`).
   - `GET /power-plants/{id}/prices-and-generation?start_date=…&end_date=…` → `{ prices: number[], powers: number[] }` (`powers` mapped to internal `wind` series).
-- **No bundled default**: app starts with no series; user loads via EPİAŞ, paste, or file upload (`customData` state).
+- **No bundled default**: app starts with no series; user loads via EPİAŞ (`customData` state).
 - **Styling**: Hand-written CSS (`utilities.css` + `theme.css`). Google Fonts loaded from `index.html`.
-- **Deployment**: Render static site — `npm ci && npm run build`, publish `./dist`. Node `>=20 <23` in `package.json`.
+- **Deployment**: Render static site — `npm ci && npm run build`, publish `./dist`. Node `>=20` in `package.json` (was `>=20 <23`; the cap was dropped because Render's static-site runtime supports Node 22).
 
 ## Dispatch optimization (DP solver)
 
@@ -113,22 +115,22 @@ retention[y] = max(0, 1 − Σ_{k=1..y} fade_rate(k) / 100)
 - **CAPEX** [€] = `batteryCostPerKWh × capacity [MWh] × 1000`.
 - **Annualised cost** = CAPEX × CRF.
 - **Benchmark wear** (display only): `CAPEX / (6000 × capacity × 2 × 0.9)` €/MWh (`6000` equivalent full cycles, 0.9 round-trip eff).
-- **Sidebar defaults**: `batteryCostPerKWh = 155 €/kWh`, `interestRatePct = 9.5 %`, `lifetimeYears = 20 yr`. The applied snapshot is committed on each successful optimize (`appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`); the sweep finance layer uses `applied ? applied : draft`.
+- **Sidebar defaults**: `batteryCostPerKWh = 155 €/kWh`, `interestRatePct = 9.5 %`, `lifetimeYears = 20 yr`, `opexPctPlantOnly = 15 %`, `opexPctBess = 15 %`. The applied snapshot is committed on each successful optimize (`appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedOpexPctPlantOnly`, `appliedOpexPctBess`); the sweep finance layer uses `applied ? applied : draft`. OPEX is expressed as a % of gross revenue and is independent of the TEİAŞ `System Ops (u_ops)` tariff line — user-OPEX feeds the O&M cells, tariff `u_ops` is part of the transmission cost.
 
 ## KPI calculations (per optimized run)
 
-`KPIRow` in `resultCharts.tsx` from `appliedResult`:
+`KPIRow` in `resultCharts.tsx` from `appliedResult`. The 2×3 grid renders six cards:
 
-| KPI | Calculation |
-|---|---|
-| Hybrid revenue | `Σ revenue` |
-| Plant-only revenue | `Σ windOnlyRevenue` |
-| Incremental BESS revenue | hybrid − plant-only (€ and % vs plant-only) |
-| Avg selling price | `exportRevenue / exportEnergy` where export uses `gridTotal × dt > 0` |
-| Avg buying price | `importCost / importEnergy` where import uses `gridTotal × dt < 0` |
-| Spread (computed, not shown in UI) | avg sell − avg buy |
-| Equivalent full cycles | `(Σ \|action\| × dt) / (2 × capacity)` |
-| Charge / discharge hours | `action > 0.001` / `action < −0.001` (subtext on cycles KPI; idle is remainder) |
+| Card | Sub-cells | Calculation |
+|---|---|---|
+| **Revenue (Plant-only)** | Gross / NET | `Σ windOnlyRevenue`; NET = Gross − O&M − transmission (only when region is set) |
+| **Revenue (with-BESS)** | Gross / NET | `Σ revenue`; NET = Gross − O&M − transmission (only when region is set) |
+| **Incremental revenue from BESS** | — | NET_BESS − NET_plant when region is set; otherwise grossUplift (BESS_gross − plant_gross) |
+| **Costs (Plant-only)** | O&M / Transmission | `(opexPctPlantOnly/100) × windOnlyRevenue`; per-month TEİAŞ tariff `(u_cap/12 + u_use + u_ops) × MWh` ÷ EUR/TRY |
+| **Costs (with-BESS)** | O&M / Transmission | `(opexPctBess/100) × revenue`; per-month TEİAŞ tariff on hybrid-exported MWh |
+| **Equivalent full cycles** | charge / discharge hours subtext | `(Σ \|action\| × dt) / (2 × capacity)`; `action > 0.001` / `action < −0.001` (idle is remainder) |
+
+`avgSellPrice` / `avgBuyPrice` / `spread` are still computed in the `useMemo` for `stats` (`exportRevenue / exportEnergy`, `importCost / importEnergy`, difference) but no longer rendered as their own card.
 
 ## Charts
 
@@ -141,13 +143,13 @@ Result charts use **`appliedResult`** trajectory values. Shared UX: `useZoom` (R
 | **PvGenerationCompareChart** | Measured (dashed) vs reconstructed MW. Renders only when `result.windPeriodMeasured` is present (i.e. PV recon ran on this run). Subtitle shows `measured MWh · reconstructed MWh · clipped hours · recovered MWh · net Δ MWh (+%)` |
 | **DispatchChart** | SOC line + stacked charge/discharge bars; zero reference |
 | **BatteryVsPriceChart** | Charge/discharge bars + price line + average price reference |
-| **UpliftChart** | Cumulative `revenue`, `windOnlyRevenue`, uplift area |
+| **UpliftChart** | Cumulative `revenue`, `windOnlyRevenue`, uplift area. When a region is set the lines are net (post-OPEX, post-transmission) and the subtitle shows "Net of OPEX and transmission"; otherwise the lines are pure gross. |
 | **ActionHistogram** | **10** equal-width price bins; stacked charge / idle / discharge hours |
 | **PriceDurationCurve** | Prices sorted descending; **subsampled to ≤300** points for rendering |
-| **OutputTable** | Paginated (**50** rows/page default), CSV export; derived columns (SOC %, wear, cumulative benefit, etc.). Adds `generation_measured_mw` and `generation_reconstructed_mw` columns when `result.windPeriodMeasured` is present. |
+| **OutputTable** | Paginated (**50** rows/page default), CSV export; derived columns (SOC %, wear, cumulative benefit, etc.). Adds `generation_measured_mw` and `generation_reconstructed_mw` columns when `result.windPeriodMeasured` is present. The `marginal_benefit_vs_wind_only` column becomes net (post-OPEX, post-transmission) per step when a region is set; the CSV header renames it to `marginal_benefit_vs_wind_only_net` with a `(net)` table-header suffix. |
 | **CapacitySweepChart** | See below |
 
-Pasted/uploaded charts use `DEFAULT_TS_EPOCH_MS` (`Date.UTC(2024,0,1)`). Plant loads set `chartEpochUtcMs` from `ymdToUtcMidnightMs(startDate)`.
+Plant loads set `chartEpochUtcMs` from `ymdToUtcMidnightMs(startDate)` (applied only when a plant is selected). `DEFAULT_TS_EPOCH_MS` (`Date.UTC(2024,0,1)`) is the fallback for the pre-optimize spot chart when no plant is selected.
 
 ## Capacity sweep chart
 
@@ -155,9 +157,9 @@ Pasted/uploaded charts use `DEFAULT_TS_EPOCH_MS` (`Date.UTC(2024,0,1)`). Plant l
 
 ### Per-point calculations
 
-- **Baseline** (0 MWh): `Σ wind[t] × dt × price[t]` — no DP.
-- **Scaled power** (`scalePower` checkbox): `chargeMax` / `dischargeMax` scale as `cap × baseChargeMax / baseCapacity` (and discharge analog); else fixed inverter limits from last optimize.
-- **Marginal value**: `(uplift[i] − uplift[i−1]) / (capacity[i] − capacity[i−1])`.
+- **Baseline** (0 MWh): plant-only revenue. Gross path = `Σ wind[t] × dt × price[t]` (no DP). Net path (`useNet` = region + OPEX present) = synthetic plant-only trajectory through `buildNetIncrementalBreakdown` so the zero-capacity point's uplift is exactly 0 (no phantom-OPEX effect when `opexPctBess ≠ opexPctPlantOnly`).
+- **Scaled power** (`scalePower` checkbox): `chargeMax` / `dischargeMax` scale as `cap × baseChargeMax / baseCapacity` (and discharge analog); else fixed inverter limits from last optimize. `installedCapacityMW` (the grid export ceiling) stays fixed from `baseParams`.
+- **Marginal value**: `(uplift[i] − uplift[i−1]) / (capacity[i] − capacity[i−1])`. When `useNet` is true, `uplift` is already net (post-OPEX, post-transmission), so the marginal value is "net marginal value".
 - **Regime** (first vs last marginal, index 1 vs last): `ratio = endMarg/startMarg` — `> 0.85` **linear**, `> 0.10` **saturating**, else **saturated**.
 - **Sweet spot** (gross chart): highest `uplift / capacity` among positive sizes.
 
@@ -185,7 +187,7 @@ At sweep point closest to sidebar `capacity`: year table (retention, nominal upl
 
 ### Sweep optimum result
 
-`sweepOptimalResult` — an `OptimizationRunResult` set by the sweep at its financially optimal point (max positive `netAnnual`). Read only by the `OutputTable`. Cleared by `clearAppliedSnapshot` (`app.tsx:295`) on data load, EPİAŞ refetch, or successful optimize commit (`app.tsx:569`); also cleared by a fresh sweep. Distinct from `appliedResult` (which comes from the sidebar **Optimize dispatch** path).
+`sweepOptimalResult` — an `OptimizationRunResult` set by the sweep at its financially optimal point (max positive `netAnnual`). Read only by the `OutputTable`. Cleared by `clearAppliedSnapshot` (`app.tsx:311`) on data load, EPİAŞ refetch, or successful optimize commit (`app.tsx:594`); also cleared by a fresh sweep. Distinct from `appliedResult` (which comes from the sidebar **Optimize dispatch** path).
 
 ## Data input
 
@@ -193,26 +195,26 @@ Active series: `customData` only (null until loaded).
 
 | Source | How |
 |---|---|
-| **EPİAŞ plant** | Combobox + **Quick range** select (`1w / 1m / 3m / 6m / 1y / 2y`) + manual start/end dates (max end = **yesterday**). Selecting a quick range populates start/end; editing the date inputs clears the quick selection. **Load EPİAŞ data** fetches series; user runs **Optimize dispatch** (same as paste/upload) |
-| **Paste** | Tab under "load price & generation series"; `parsePaste()` — min **24** rows. Two-column paste in the price box auto-detected; otherwise separate price + generation columns. |
-| **File upload** | CSV/JSON/TSV via `FileUploadPanel` (drag-and-drop or click) |
+| **EPİAŞ plant** | `PowerPlantCombobox` + `PlantProvinceCombobox` (for regional tariffs) + **Quick range** select (`1w / 1m / 3m / 6m / 1y / 2y`) + manual start/end dates (max end = **yesterday**). Selecting a quick range populates start/end; editing the date inputs clears the quick selection. **Load EPİAŞ data** fetches series; user runs **Optimize dispatch**. |
 
-**PV mode** (orthogonal): when ON, optimize trims to full days and may reconstruct clipped generation (see above).
+**There is no paste or file-upload path** in the current build — `parsePaste` / `FileUploadPanel` / drag-and-drop references are all stale. If you're adding manual data input, this is the obvious extension point in `DataInputCard` (`src/panels/dataInputPanels.tsx:276`).
+
+**PV mode** (orthogonal, inside `PvReconstructCard`): when ON, optimize trims to full days and may reconstruct clipped generation (see above).
 
 On any new data load, `capacity` / `chargeMax` / `dischargeMax` / `installedCapacityMW` are auto-set to the data peak (MW). The user can override.
 
-The "**Load EPİAŞ data**" button is gated on the `hasUnappliedChanges` flag (set to `false` on a successful EPİAŞ series load). The actual draft-vs-applied comparison is the derived `hasPendingChanges` (`appliedScenarioKey == null || appliedScenarioKey !== draftScenarioKey`), which drives the "Pending changes" indicator and the pre-optimize spot chart branch.
+The "**Load EPİAŞ data**" button is gated on `hasUnappliedChanges` (set to `false` on a successful EPİAŞ series load). The actual draft-vs-applied comparison is the derived `hasPendingChanges` (`appliedScenarioKey == null || appliedScenarioKey !== draftScenarioKey`), which drives the "Pending changes" indicator and the pre-optimize spot chart branch.
 
 ## Quirks
 
-- `.gitignore` exists at the repo root (`.env.local`, `node_modules/`, `dist/`). `.env.example` is committed (template); `.env.local` is gitignored and holds local-only `VITE_AUTH_USERS`.
+- `.gitignore` exists at the repo root (`.env`, `.env.local`, `node_modules/`, `dist/`). `.env.example` is committed (template); `.env` and `.env.local` are gitignored and hold local-only `VITE_AUTH_USERS`.
 - Render service name (`bataryaopt` in `render.yaml`) differs from `package.json` name (`epias-frontend`).
 - ESM (`"type": "module"`). Node scripts use `tsx`.
 - `tsconfig.json`: `noEmit: true`, `"include": ["src", "scripts"]`. `tsconfig.node.json`: `vite.config.ts` + `scripts/**/*.ts`.
 - `dt` is fixed **1.0 h** per row in `app.tsx`.
 - Optimization overlay dismissal is deferred after a successful commit: two `requestAnimationFrame`s, then `requestIdleCallback` (2 s timeout) or `setTimeout(200)`, then a 500 ms hold, so charts paint before the overlay closes.
-- **Node engine** `>=20 <23` per `package.json` `engines`. Render's static-site runtime mirrors this; bumping requires checking Render's available Node versions first.
-- **Adding a sidebar field?** Register it in three places in `app.tsx`: the `useState` declaration, the `draftScenarioKey` `useMemo` (`app.tsx:158-214`), and the local `snap*` snapshot in the `optimize()` callback (`app.tsx:442-473`). Forgetting `draftScenarioKey` makes the change invisible to the "Pending changes" indicator and `hasPendingChanges`; forgetting the snapshot causes stale-closure reads during optimize. Also add an `applied*` state + setter + `clearAppliedSnapshot` entry if the field is consumed by result charts.
-- **The "applied snapshot" is a single commit point** at `app.tsx:545-567` that flips seven `applied*` states together: `appliedScenarioKey`, `appliedResult`, `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct` (`appliedCrf` is derived, not stored). If a new field is consumed by result charts or sweep finance, register its setter here **and** add a reset line to `clearAppliedSnapshot` (`app.tsx:295-304`). `sweepOptimalResult` is a separate state managed by the sweep, not the sidebar — it does not need a `snap*` mirror, but it is cleared by `clearAppliedSnapshot`.
+- **Node engine** `>=20` per `package.json` `engines` (was `>=20 <23`; the Node 22 cap was dropped because Render's static-site runtime already supports Node 22).
+- **Adding a sidebar field?** Register it in three places in `app.tsx`: the `useState` declaration, the `draftScenarioKey` `useMemo` (`app.tsx:168-204` with deps `205-234`), and the local `snap*` snapshot in the `optimize()` callback (`app.tsx:461-487`). Forgetting `draftScenarioKey` makes the change invisible to the "Pending changes" indicator and `hasPendingChanges`; forgetting the snapshot causes stale-closure reads during optimize. Also add an `applied*` state + setter + `clearAppliedSnapshot` entry (`app.tsx:311-323`) if the field is consumed by result charts or sweep finance.
+- **The "applied snapshot" is a single commit point** at `app.tsx:583-594` that flips ten `applied*` states together: `appliedScenarioKey`, `appliedResult`, `appliedBatteryCostPerKWh`, `appliedInterestRatePct`, `appliedLifetimeYears`, `appliedYearOneFadePct`, `appliedLongTermFadePct`, `appliedRegion`, `appliedOpexPctPlantOnly`, `appliedOpexPctBess` (`appliedCrf` is derived, not stored). `appliedRegion` flows into `KPIRow region={appliedRegion}` for tariff net-revenue; `appliedOpexPct*` flow into KPI / sweep / operation-table consumers. If a new field is consumed by result charts or sweep finance, register its setter here **and** add a reset line to `clearAppliedSnapshot` (`app.tsx:311-323`). `sweepOptimalResult` is a separate state managed by the sweep, not the sidebar — it does not need a `snap*` mirror, but it is cleared by `clearAppliedSnapshot` and again by every successful optimize commit (`app.tsx:594`).
 - **`.opencode/`, `.cursor/`, `.commandcode/` are local agent tooling** (opencode / Cursor / CommandCode), not part of the app. App source is only `src/`, `scripts/`, `css/`. Don't `npm install` inside `.opencode/` or modify its `package.json` from app work.
 - **Web Worker is module-bundled by Vite**: `optimizationRunner.ts:12` uses `new Worker(new URL('./optimizationWorker.ts', import.meta.url), { type: 'module' })`. Don't move `optimizationWorker.ts` out of `src/engine/` without updating that URL — Vite needs the literal relative path.

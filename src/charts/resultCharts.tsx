@@ -4,7 +4,7 @@ import {
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { fmtMoney, fmtNumber, plotAll, tsLabel, DEFAULT_TS_EPOCH_MS } from '../formatUtils';
-import { computeTariffBreakdown } from '../finance';
+import { computeTariffBreakdown, buildNetIncrementalBreakdown } from '../finance';
 import { LegendChip, useIsolation, useZoom, ZoomBadge } from './chartInteractions';
 import { KPI, Tip } from '../uiPrimitives';
 import type { OptimizationRunResult } from '../optimizationTypes';
@@ -74,9 +74,11 @@ function FinancialBreakdownCell({ label, value, tone }: {
   );
 }
 
-export const KPIRow = memo(({ result, region }: {
+export const KPIRow = memo(({ result, region, opexPctPlantOnly, opexPctBess }: {
   result: OptimizationRunResult;
   region: string | null;
+  opexPctPlantOnly: number;
+  opexPctBess: number;
 }) => {
   const { traj, dt } = result;
   const stats = useMemo(() => {
@@ -140,9 +142,17 @@ export const KPIRow = memo(({ result, region }: {
     if (!region) {
       return {
         grossRevenueEUR: gross,
+        grossRevenueEUR_plant: gross,
+        grossRevenueEUR_bess: hybrid,
         oAndMEUR: null as number | null,
+        oAndMEUR_plant: null as number | null,
+        oAndMEUR_bess: null as number | null,
         transmissionEUR: null as number | null,
+        transmissionEUR_plant: null as number | null,
+        transmissionEUR_bess: null as number | null,
         netRevenueEUR: null as number | null,
+        netRevenueEUR_plant: null as number | null,
+        netRevenueEUR_bess: null as number | null,
         incrementalEUR: hybrid - gross,
       };
     }
@@ -153,64 +163,95 @@ export const KPIRow = memo(({ result, region }: {
       region: Number(region),
       installedMW: result.params.installedCapacityMW
                     ?? Math.max(result.params.chargeMax, result.params.dischargeMax),
+      opexPctPlantOnly,
+      opexPctBess,
     });
     return {
       grossRevenueEUR: b.grossRevenueEUR,
+      grossRevenueEUR_plant: b.grossRevenueEUR_plant,
+      grossRevenueEUR_bess: b.grossRevenueEUR_bess,
       oAndMEUR: b.oAndMEUR,
+      oAndMEUR_plant: b.oAndMEUR_plant,
+      oAndMEUR_bess: b.oAndMEUR_bess,
       transmissionEUR: b.transmissionEUR,
+      transmissionEUR_plant: b.transmissionEUR_plant,
+      transmissionEUR_bess: b.transmissionEUR_bess,
       netRevenueEUR: b.netRevenueEUR,
+      netRevenueEUR_plant: b.netRevenueEUR_plant,
+      netRevenueEUR_bess: b.netRevenueEUR_bess,
       incrementalEUR: b.incrementalEUR,
     };
-  }, [traj, result, region]);
+  }, [traj, result, region, opexPctPlantOnly, opexPctBess]);
 
   const incrValue = breakdown.incrementalEUR;
   let incrPct: number | null = null;
   let incrSub: ReactNode = result.dateRangeLabel;
-  if (region && breakdown.netRevenueEUR != null && breakdown.netRevenueEUR > 0) {
-    incrPct = (breakdown.incrementalEUR / breakdown.netRevenueEUR) * 100;
+  if (region && breakdown.netRevenueEUR_plant != null && breakdown.netRevenueEUR_plant > 0
+      && breakdown.netRevenueEUR_bess != null) {
+    const netDelta = breakdown.netRevenueEUR_bess - breakdown.netRevenueEUR_plant;
+    incrPct = (netDelta / breakdown.netRevenueEUR_plant) * 100;
     incrSub  = `${incrPct >= 0 ? '+' : ''}${incrPct.toFixed(1)}% vs net plant`;
-  } else if (!region && stats.windOnlyRev > 0) {
-    incrPct = (breakdown.incrementalEUR / stats.windOnlyRev) * 100;
+  } else if (!region && breakdown.grossRevenueEUR_plant > 0) {
+    const grossDelta = breakdown.grossRevenueEUR_bess - breakdown.grossRevenueEUR_plant;
+    incrPct = (grossDelta / breakdown.grossRevenueEUR_plant) * 100;
     incrSub  = `${incrPct >= 0 ? '+' : ''}${incrPct.toFixed(1)}% vs baseline`;
   }
   const incrDelta = incrPct ?? undefined;
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-      <KPI label="Hybrid revenue (optimized dispatch)"  value={fmtMoney(stats.totalRev)}
-           sub={result.dateRangeLabel} tone="teal"/>
       <KPI
-        label="Revenue"
+        label="Revenue (Plant-only)"
         value={
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 -mt-2">
             <FinancialBreakdownCell label="Gross Revenue" tone="teal"
-              value={fmtMoney(breakdown.grossRevenueEUR)} />
+              value={fmtMoney(breakdown.grossRevenueEUR_plant)} />
             <FinancialBreakdownCell label="NET Revenue"
-              tone={breakdown.netRevenueEUR == null ? 'faint'
-                  : breakdown.netRevenueEUR >= 0 ? 'green' : 'rose'}
-              value={breakdown.netRevenueEUR == null ? '—' : fmtMoney(breakdown.netRevenueEUR)} />
+              tone={breakdown.netRevenueEUR_plant == null ? 'faint'
+                  : breakdown.netRevenueEUR_plant >= 0 ? 'green' : 'rose'}
+              value={breakdown.netRevenueEUR_plant == null ? '—' : fmtMoney(breakdown.netRevenueEUR_plant)} />
+          </div>
+        }
+        sub={result.dateRangeLabel}
+      />
+      <KPI
+        label="Revenue (with-BESS)"
+        value={
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 -mt-2">
+            <FinancialBreakdownCell label="Gross Revenue" tone="teal"
+              value={fmtMoney(breakdown.grossRevenueEUR_bess)} />
+            <FinancialBreakdownCell label="NET Revenue"
+              tone={breakdown.netRevenueEUR_bess == null ? 'faint'
+                  : breakdown.netRevenueEUR_bess >= 0 ? 'green' : 'rose'}
+              value={breakdown.netRevenueEUR_bess == null ? '—' : fmtMoney(breakdown.netRevenueEUR_bess)} />
+          </div>
+        }
+        sub={result.dateRangeLabel}
+      />
+      <KPI label="Incremental revenue from BESS" value={fmtMoney(incrValue)}
+           sub={incrSub} tone="green" delta={incrDelta}/>
+      <KPI
+        label="Costs (Plant-only)"
+        value={
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 -mt-2">
+            <FinancialBreakdownCell label="O&M Costs" tone="rose"
+              value={breakdown.oAndMEUR_plant == null ? '—' : fmtMoney(breakdown.oAndMEUR_plant)} />
+            <FinancialBreakdownCell label="Transmission Cost" tone="rose"
+              value={breakdown.transmissionEUR_plant == null ? '—' : fmtMoney(breakdown.transmissionEUR_plant)} />
           </div>
         }
       />
       <KPI
-        label="Costs"
+        label="Costs (with-BESS)"
         value={
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 -mt-2">
-            <FinancialBreakdownCell label="O&M Cost" tone="rose"
-              value={breakdown.oAndMEUR == null ? '—' : fmtMoney(breakdown.oAndMEUR)} />
+            <FinancialBreakdownCell label="O&M Costs" tone="rose"
+              value={breakdown.oAndMEUR_bess == null ? '—' : fmtMoney(breakdown.oAndMEUR_bess)} />
             <FinancialBreakdownCell label="Transmission Cost" tone="rose"
-              value={breakdown.transmissionEUR == null ? '—' : fmtMoney(breakdown.transmissionEUR)} />
+              value={breakdown.transmissionEUR_bess == null ? '—' : fmtMoney(breakdown.transmissionEUR_bess)} />
           </div>
         }
       />
-      <KPI label="Incremental revenue from BESS" value={fmtMoney(incrValue)}
-           sub={incrSub} tone="green" delta={incrDelta}/>
-      <KPI label="Avg. selling price"
-           value={stats.avgSellPrice != null ? `€${stats.avgSellPrice.toFixed(2)}` : '—'}
-           sub={stats.avgSellPrice != null
-                   ? `${stats.exportEnergy.toFixed(0)} MWh sold · ${(stats.avgSellPrice - stats.avgPrice >= 0 ? '+' : '')}€${(stats.avgSellPrice - stats.avgPrice).toFixed(2)} vs avg`
-                   : 'no exports'}
-           tone="teal"/>
       <KPI label="Equivalent full cycles" value={stats.cycles.toFixed(1)}
            sub={`${stats.chargeHours.toFixed(0)} h charge · ${stats.dischargeHours.toFixed(0)} h discharge · utilization`} tone="violet"/>
     </div>
@@ -578,15 +619,39 @@ export const BatteryVsPriceChart = memo(({ result }: { result: OptimizationRunRe
 });
 
 // ---- CHART 3: Cumulative revenue (with vs without battery) ----
-export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) => {
+export const UpliftChart = memo(({ result, region, opexPctPlantOnly, opexPctBess }: {
+  result: OptimizationRunResult;
+  region: string | null;
+  opexPctPlantOnly: number;
+  opexPctBess: number;
+}) => {
   const { traj, dt } = result;
+  const installedMW = result.params.installedCapacityMW != null
+    ? result.params.installedCapacityMW
+    : Math.max(result.params.chargeMax, result.params.dischargeMax);
+  const net = useMemo(() => buildNetIncrementalBreakdown({
+    traj, dt,
+    periodStartMs: result.chartEpochUtcMs ?? DEFAULT_TS_EPOCH_MS,
+    region: region != null ? Number(region) : null,
+    installedMW,
+    opexPctPlantOnly, opexPctBess,
+  }), [traj, dt, result.chartEpochUtcMs, region, installedMW, opexPctPlantOnly, opexPctBess]);
   const cumul = useMemo(() => {
-    let cum = 0, cumWind = 0;
-    return traj.map(r => {
-      cum += r.revenue; cumWind += r.windOnlyRevenue;
-      return { t: r.t, total: cum, windOnly: cumWind, uplift: cum - cumWind };
+    let cumGross = 0, cumPlant = 0;
+    let cumOAndMP = 0, cumOAndMB = 0;
+    let cumTransP = 0, cumTransB = 0;
+    return traj.map((r, i) => {
+      cumGross  += r.revenue;
+      cumPlant  += r.windOnlyRevenue;
+      cumOAndMP += net.perStepOAndMPlant[i] ?? 0;
+      cumOAndMB += net.perStepOAndMBess[i]  ?? 0;
+      cumTransP += net.perStepTransPlant[i] ?? 0;
+      cumTransB += net.perStepTransBess[i]  ?? 0;
+      const total_net = cumGross - cumOAndMB - cumTransB;
+      const plant_net = cumPlant - cumOAndMP - cumTransP;
+      return { t: r.t, total: total_net, windOnly: plant_net, uplift: total_net - plant_net };
     });
-  }, [traj]);
+  }, [traj, net]);
   const data = useMemo(() => plotAll(cumul), [cumul]);
   const showTime = dt < 1;
   const zoom = useZoom(data.length);
@@ -601,6 +666,11 @@ export const UpliftChart = memo(({ result }: { result: OptimizationRunResult }) 
             Plant-only vs hybrid revenue
             <ZoomBadge zoom={zoom} dataLength={data.length} dt={dt} traj={traj} epochUtcMs={result.chartEpochUtcMs} />
           </div>
+          {region != null && (
+            <div className="text-[10px] font-mono text-[color:var(--text-faint)] mt-1">
+              Net of OPEX and transmission
+            </div>
+          )}
         </div>
         <div className="flex gap-3 text-[11px] font-mono text-[color:var(--text-dim)]">
           <LegendChip iso={iso} isoKey="windOnly" label="gen only"

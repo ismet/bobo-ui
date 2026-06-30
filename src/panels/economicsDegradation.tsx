@@ -28,6 +28,10 @@ export const EconomicsCard = memo(
     boboStartDate,
     boboEndDate,
     selectedRegion,
+    opexPctPlantOnly,
+    setOpexPctPlantOnly,
+    opexPctBess,
+    setOpexPctBess,
   }: {
     batteryCostPerKWh: number;
     setBatteryCostPerKWh: (v: number) => void;
@@ -40,6 +44,10 @@ export const EconomicsCard = memo(
     boboStartDate: string;
     boboEndDate: string;
     selectedRegion: string | null;
+    opexPctPlantOnly: number;
+    setOpexPctPlantOnly: (v: number) => void;
+    opexPctBess: number;
+    setOpexPctBess: (v: number) => void;
   }) => {
     const capexK = batteryCostPerKWh * capacity; // €/MWh × MWh = € (since €/kWh × MWh × 1000 / 1000 = €/kWh × MWh? no)
     // Actually: cost is €/kWh, capacity is MWh. CAPEX [€] = cost [€/kWh] × capacity [MWh] × 1000 [kWh/MWh]
@@ -175,6 +183,89 @@ export const EconomicsCard = memo(
         <div className="hairline my-4"></div>
 
         <div>
+          <div className="mb-2">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">
+              OPEX as % of gross revenue
+            </div>
+            <div className="font-display text-sm mt-0.5">
+              O&amp;M share of revenue
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
+              OPEX Plant-only{" "}
+              <span className="text-[color:var(--text-faint)]">
+                % of gross revenue
+              </span>
+            </label>
+            <input
+              type="number"
+              value={opexPctPlantOnly}
+              min={0}
+              max={30}
+              step={0.5}
+              onChange={(e) => {
+                const v = Number(e.target.value) || 0;
+                setOpexPctPlantOnly(
+                  Math.min(30, Math.max(0, Math.round(v * 2) / 2)),
+                );
+              }}
+              onBlur={(e) => {
+                const v = Number(e.target.value) || 0;
+                setOpexPctPlantOnly(
+                  Math.min(30, Math.max(0, Math.round(v * 2) / 2)),
+                );
+              }}
+              className="num-input"
+            />
+
+            <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
+              OPEX with BESS{" "}
+              <span className="text-[color:var(--text-faint)]">
+                % of gross revenue
+              </span>
+            </label>
+            <input
+              type="number"
+              value={opexPctBess}
+              min={0}
+              max={30}
+              step={0.5}
+              onChange={(e) => {
+                const v = Number(e.target.value) || 0;
+                setOpexPctBess(
+                  Math.min(30, Math.max(0, Math.round(v * 2) / 2)),
+                );
+              }}
+              onBlur={(e) => {
+                const v = Number(e.target.value) || 0;
+                setOpexPctBess(
+                  Math.min(30, Math.max(0, Math.round(v * 2) / 2)),
+                );
+              }}
+              className="num-input"
+            />
+          </div>
+
+          <div
+            className="mt-2 text-[10px] text-[color:var(--text-faint)] font-mono"
+            style={{ lineHeight: 1.5 }}
+          >
+            OPEX drives the O&amp;M cells in the Revenue and Costs KPI cards. Transmission costs use u_cap + u_use + u_ops.
+          </div>
+        </div>
+
+        <div className="hairline my-4"></div>
+
+        <div>
           <div className="flex items-center justify-between mb-2">
             <div>
               <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono">
@@ -256,9 +347,9 @@ export const EconomicsCard = memo(
                       <th
                         className="font-normal pb-2"
                         style={{ fontWeight: 500 }}
-                        title="Operations &amp; maintenance tariff · per MWh exported"
+                        title="System Ops tariff · per MWh exported"
                       >
-                        O&amp;M (₺/MWh)
+                        System Ops (₺/MWh)
                       </th>
                     </tr>
                   </thead>
@@ -301,7 +392,7 @@ export const EconomicsCard = memo(
               )}
               <div className="mt-2 text-[10px] text-[color:var(--text-faint)] font-mono leading-relaxed">
                 Source: TEİAŞ year-end tariff tables. Rates in ₺ (no FX). Cost =
-                capacity·MW/12 + (energy + O&amp;M)·MWh, converted at the
+                capacity·MW/12 + (energy + System Ops)·MWh, converted at the
                 monthly EUR/TRY rate.
               </div>
               {fxRates.length > 0 && (

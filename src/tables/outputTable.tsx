@@ -2,6 +2,8 @@ import { memo, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { OptimizationRunResult } from '../optimizationTypes';
 import type { Trajectory } from '../engine/types';
+import { buildNetIncrementalBreakdown } from '../finance';
+import { DEFAULT_TS_EPOCH_MS } from '../formatUtils';
 
 // ============================================================================
 // OUTPUT TABLE — operation table with physical quantities tied to system design
@@ -44,7 +46,11 @@ function operationColsFor(result: OptimizationRunResult): string[] {
   return cols;
 }
 
-function buildOperationTable(result: OptimizationRunResult): OpRow[] {
+function buildOperationTable(result: OptimizationRunResult, opts: {
+  region: string | null;
+  opexPctPlantOnly: number;
+  opexPctBess: number;
+} = { region: null, opexPctPlantOnly: 0, opexPctBess: 0 }): OpRow[] {
   const { traj, dt, params, windPeriodMeasured } = result;
   const { capacity, chargeEff, dischargeEff, wearCost = 0 } = params;
   const showPvGeneration = windPeriodMeasured != null
@@ -56,6 +62,22 @@ function buildOperationTable(result: OptimizationRunResult): OpRow[] {
   const dSOC = (tr._dSOC !== undefined)
     ? tr._dSOC
     : capacity / (tr._socSteps !== undefined ? tr._socSteps : params.socSteps);
+
+  // Per-step net (post-OPEX, post-transmission) O&M and transmission for the
+  // plant and BESS sides. When region is null the helper returns zeros, so
+  // the per-step "marginal_benefit_vs_wind_only" column collapses to the
+  // original gross (r.revenue - r.windOnlyRevenue) — unchanged from today.
+  const installedMW = result.params.installedCapacityMW != null
+    ? result.params.installedCapacityMW
+    : Math.max(result.params.chargeMax, result.params.dischargeMax);
+  const net = buildNetIncrementalBreakdown({
+    traj, dt,
+    periodStartMs: result.chartEpochUtcMs ?? DEFAULT_TS_EPOCH_MS,
+    region: opts.region != null ? Number(opts.region) : null,
+    installedMW,
+    opexPctPlantOnly: opts.opexPctPlantOnly,
+    opexPctBess: opts.opexPctBess,
+  });
 
   const rows: OpRow[] = [];
   let cumBenefit = 0;        // gross arbitrage € (revenue from grid sales)
@@ -104,7 +126,14 @@ function buildOperationTable(result: OptimizationRunResult): OpRow[] {
     const windMw = r.wind ?? 0;
     const measuredMw = showPvGeneration ? windPeriodMeasured[i]! : undefined;
     const windOnlyRevenue = +((r.windOnlyRevenue ?? windMw * dt * r.price).toFixed(4));
-    const upliftVsWindOnly = +(currentBenefit - windOnlyRevenue).toFixed(4);
+    // Subtract per-step O&M and transmission diffs (bess - plant) so the
+    // column reads the net marginal benefit vs plant-only when a region is
+    // set. When region is null these arrays are zero and the value matches
+    // the original gross (r.revenue - r.windOnlyRevenue).
+    const grossUplift = currentBenefit - windOnlyRevenue;
+    const stepOAndMDiff = (net.perStepOAndMBess[i]  ?? 0) - (net.perStepOAndMPlant[i] ?? 0);
+    const stepTransDiff = (net.perStepTransBess[i]  ?? 0) - (net.perStepTransPlant[i] ?? 0);
+    const upliftVsWindOnly = +(grossUplift - stepOAndMDiff - stepTransDiff).toFixed(4);
 
     const row: OpRow = {
       date: i,
@@ -179,7 +208,7 @@ const pageBtnStyle = (disabled: boolean) => ({
   cursor: disabled ? 'not-allowed' : 'pointer'
 });
 
-export const OutputTable = memo(({ result, sweepResult }: {
+export const OutputTable = memo(({ result, sweepResult, region, opexPctPlantOnly, opexPctBess }: {
   result: OptimizationRunResult;
   /**
    * When provided, the table is built from this dispatch instead of
@@ -189,6 +218,10 @@ export const OutputTable = memo(({ result, sweepResult }: {
    * as `result` for the title-bar / system-design banner context.
    */
   sweepResult?: OptimizationRunResult | null;
+  /** When set, the 'marginal_benefit_vs_wind_only' column shows net (post-OPEX, post-transmission). */
+  region: string | null;
+  opexPctPlantOnly: number;
+  opexPctBess: number;
 }) => {
   // Effective result drives all table data. When the sweep provides a
   // non-null optimal-size dispatch we use that; otherwise we fall back to
@@ -196,7 +229,17 @@ export const OutputTable = memo(({ result, sweepResult }: {
   const effective = sweepResult ?? result;
   const onOptimal = !!sweepResult;
   const operationCols = useMemo(() => operationColsFor(effective), [effective]);
-  const rows = useMemo(() => buildOperationTable(effective), [effective]);
+  // CSV/clipboard key for the marginal-benefit column. Renamed to
+  // *_net when region is set so downstream spreadsheet users can tell the
+  // semantics. The in-table row key stays the same; the "(net)" suffix is
+  // added in the header render below.
+  const csvCols = useMemo(() => operationCols.map(c =>
+    (c === 'marginal_benefit_vs_wind_only' && region != null)
+      ? 'marginal_benefit_vs_wind_only_net'
+      : c
+  ), [operationCols, region]);
+  const rows = useMemo(() => buildOperationTable(effective, { region, opexPctPlantOnly, opexPctBess }),
+    [effective, region, opexPctPlantOnly, opexPctBess]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [copyMsg, setCopyMsg] = useState('');
@@ -205,15 +248,15 @@ export const OutputTable = memo(({ result, sweepResult }: {
   const visible = rows.slice(page * pageSize, (page + 1) * pageSize);
 
   const handleDownload = () => {
-    const csv = rowsToCSV(rows, operationCols);
+    const csv = rowsToCSV(rows, csvCols);
     const stem = onOptimal ? 'res_operation_table_optimal' : 'res_operation_table';
     downloadCSV(`${stem}_${rows.length}rows.csv`, csv);
   };
 
   const handleCopyAll = async () => {
     const tsv = [
-      operationCols.join('\t'),
-      ...rows.map(r => operationCols.map(c => r[c]).join('\t'))
+      csvCols.join('\t'),
+      ...rows.map(r => csvCols.map(c => r[c]).join('\t'))
     ].join('\n');
     try {
       await navigator.clipboard.writeText(tsv);
@@ -380,7 +423,9 @@ export const OutputTable = memo(({ result, sweepResult }: {
             <tr>
               <th style={thStyle}>#</th>
               {operationCols.map(c => (
-                <th key={c} style={thStyle}>{c}</th>
+                <th key={c} style={thStyle}>
+                  {c + ((c === 'marginal_benefit_vs_wind_only' && region != null) ? ' (net)' : '')}
+                </th>
               ))}
             </tr>
           </thead>

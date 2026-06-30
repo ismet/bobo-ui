@@ -92,6 +92,12 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const [interestRatePct, setInterestRatePct] = useState(9.5); // % (draft)
   const [lifetimeYears, setLifetimeYears] = useState(20);  // years (draft)
 
+  // User-defined OPEX, expressed as a % of gross revenue.
+  // Display-only for now; helper text in the UI flags that they are not yet
+  // wired into KPI, sweep, or net-revenue math.
+  const [opexPctPlantOnly, setOpexPctPlantOnly] = useState(15); // % (draft)
+  const [opexPctBess, setOpexPctBess] = useState(15);          // % (draft)
+
   // Capital recovery factor: CRF = i(1+i)^n / ((1+i)^n - 1)
   // For i = 9.5%, n = 20 → CRF ≈ 0.1142 (each € of CAPEX costs €0.1142/yr).
   const crf = useMemo(() => {
@@ -136,6 +142,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const [appliedYearOneFadePct, setAppliedYearOneFadePct] = useState<number | null>(null);
   const [appliedLongTermFadePct, setAppliedLongTermFadePct] = useState<number | null>(null);
   const [appliedRegion, setAppliedRegion] = useState<string | null>(null);
+  const [appliedOpexPctPlantOnly, setAppliedOpexPctPlantOnly] = useState<number | null>(null);
+  const [appliedOpexPctBess, setAppliedOpexPctBess] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   /** Bumped only after a successful optimize commit; drives deferred overlay dismiss after charts paint. */
   const [optimizeOverlayDismissTick, setOptimizeOverlayDismissTick] = useState(0);
@@ -191,6 +199,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       pvDayThr,
       pvWideGap,
       pvPeakFactor,
+      opexPctPlantOnly,
+      opexPctBess,
     ].join('|');
   }, [
     customData,
@@ -219,6 +229,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     pvDayThr,
     pvWideGap,
     pvPeakFactor,
+    opexPctPlantOnly,
+    opexPctBess,
   ]);
 
   const hasPendingChanges = appliedScenarioKey == null || appliedScenarioKey !== draftScenarioKey;
@@ -305,6 +317,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     setAppliedYearOneFadePct(null);
     setAppliedLongTermFadePct(null);
     setAppliedRegion(null);
+    setAppliedOpexPctPlantOnly(null);
+    setAppliedOpexPctBess(null);
     setSweepOptimalResult(null);
   }, []);
 
@@ -469,6 +483,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     const snapYearOneFadePct = yearOneFadePct;
     const snapLongTermFadePct = longTermFadePct;
     const snapSelectedRegion = selectedRegion;
+    const snapOpexPctPlantOnly = opexPctPlantOnly;
+    const snapOpexPctBess = opexPctBess;
 
     const snapPvReconstructEnabled = pvReconstructEnabled;
     const snapClippingLimitMW = clippingLimitMW;
@@ -571,6 +587,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       setAppliedYearOneFadePct(snapYearOneFadePct);
       setAppliedLongTermFadePct(snapLongTermFadePct);
       setAppliedRegion(snapSelectedRegion);
+      setAppliedOpexPctPlantOnly(snapOpexPctPlantOnly);
+      setAppliedOpexPctBess(snapOpexPctBess);
       setAppliedResult(applied);
       // New optimize commit invalidates any cached sweep optimum.
       setSweepOptimalResult(null);
@@ -610,6 +628,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     pvDayThr,
     pvWideGap,
     pvPeakFactor,
+    opexPctPlantOnly,
+    opexPctBess,
     draftScenarioKey,
   ]);
 
@@ -849,6 +869,10 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                 boboStartDate={boboStartDate}
                 boboEndDate={boboEndDate}
                 selectedRegion={selectedRegion}
+                opexPctPlantOnly={opexPctPlantOnly}
+                setOpexPctPlantOnly={setOpexPctPlantOnly}
+                opexPctBess={opexPctBess}
+                setOpexPctBess={setOpexPctBess}
               />
               <DegradationCard
                 wearCost={wearCost} setWearCost={setWearCost}
@@ -890,7 +914,9 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     : 'Load price & generation data, then optimize.'} />
               {spotWindChartProps && <ChartsPanel {...spotWindChartProps} />}
               {customData && <TotalGenerationCard customData={customData} appliedResult={appliedResult} />}
-              {appliedResult && <KPIRow result={appliedResult} region={appliedRegion} />}
+              {appliedResult && <KPIRow result={appliedResult} region={appliedRegion}
+                opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
+                opexPctBess={appliedOpexPctBess ?? opexPctBess} />}
               {appliedResult && <PvGenerationCompareChart result={appliedResult} />}
               {appliedResult && (
                 <>
@@ -912,7 +938,12 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     title="Extra revenue from co-located BESS"
 
                   />
-                  <UpliftChart result={appliedResult} />
+                  <UpliftChart
+                    result={appliedResult}
+                    region={appliedRegion}
+                    opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
+                    opexPctBess={appliedOpexPctBess ?? opexPctBess}
+                  />
 
                   <div className="my-10"></div>
                   <SectionHeader eyebrow="06 · utilization profile"
@@ -942,6 +973,10 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     lifetimeYears={appliedLifetimeYears ?? lifetimeYears}
                     yearOneFadePct={appliedYearOneFadePct ?? yearOneFadePct}
                     longTermFadePct={appliedLongTermFadePct ?? longTermFadePct}
+                    region={appliedRegion}
+                    opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
+                    opexPctBess={appliedOpexPctBess ?? opexPctBess}
+                    chartEpochUtcMs={appliedResult.chartEpochUtcMs}
                   />
 
                   <div className="my-10"></div>
@@ -949,7 +984,13 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     title="Hour-by-hour operation table"
 
                   />
-                  <OutputTable result={appliedResult} sweepResult={sweepOptimalResult} />
+                  <OutputTable
+                    result={appliedResult}
+                    sweepResult={sweepOptimalResult}
+                    region={appliedRegion}
+                    opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
+                    opexPctBess={appliedOpexPctBess ?? opexPctBess}
+                  />
 
                   {/* <div className="my-10"></div>
                   <SectionHeader eyebrow="09 · notes"

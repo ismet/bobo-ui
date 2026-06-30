@@ -2,12 +2,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { fingerprintSeriesSample, fmtMoney, fmtNumber } from '../formatUtils';
+import { DEFAULT_TS_EPOCH_MS, fingerprintSeriesSample, fmtMoney, fmtNumber } from '../formatUtils';
 import { buildFadeCurve } from '../panels/economicsDegradation';
 import { FullScreenJobOverlay } from '../fullScreenJobOverlay';
 import { runOptimizationDelegated } from '../engine/optimizationRunner';
-import type { OptimizationParams, Trajectory } from '../engine/types';
+import type { OptimizationParams, Trajectory, TrajectoryStep } from '../engine/types';
 import type { OptimizationRunResult } from '../optimizationTypes';
+import { buildNetIncrementalBreakdown } from '../finance';
 
 function buildSweepGrid(capacity: number, maxCapacityX: number, pointCount: number): number[] {
   const top = capacity * maxCapacityX;
@@ -33,6 +34,84 @@ function plantOnlyRevenue(price: number[], wind: number[], params: OptimizationP
     total += Math.min(wind[t]! * dt, capE) * price[t]!;
   }
   return total;
+}
+
+// Plant-only synthetic trajectory → netRevenueEUR_plant via buildNetIncrementalBreakdown.
+// For this trajectory bessExportMWh === plantExportMWh everywhere, so
+// transBess_ym === transPlant_ym per month and the only diff is the O&M pct
+// (a phantom effect avoided by the sweep loop's zero-capacity rule).
+function netPlantOnlyRevenue(
+  price: number[],
+  wind: number[],
+  bpars: OptimizationParams,
+  dt: number,
+  periodStartMs: number,
+  region: number,
+  opexPctPlantOnly: number,
+  opexPctBess: number,
+): number {
+  const gridLimit = bpars.installedCapacityMW != null && bpars.installedCapacityMW > 0
+    ? bpars.installedCapacityMW
+    : Math.max(bpars.chargeMax, bpars.dischargeMax);
+  const capE = gridLimit * dt;
+  const traj: TrajectoryStep[] = new Array(price.length);
+  for (let t = 0; t < price.length; t++) {
+    const wt = wind[t]!;
+    const pr = price[t]!;
+    const windE = wt * dt;
+    const gridE = Math.min(windE, capE);
+    const spillE = Math.max(0, windE - capE);
+    traj[t] = {
+      t, soc: 0, socFrac: 0, action: 0, gridEnergy: 0,
+      wind: wt, gridTotal: gridE / dt, price: pr,
+      revenue: gridE * pr, windOnlyRevenue: gridE * pr,
+      throughput: 0, wearStepCost: 0, spillE,
+    };
+  }
+  const installedMW = bpars.installedCapacityMW != null && bpars.installedCapacityMW > 0
+    ? bpars.installedCapacityMW
+    : Math.max(bpars.chargeMax, bpars.dischargeMax);
+  const net = buildNetIncrementalBreakdown({
+    traj, dt, periodStartMs, region, installedMW,
+    opexPctPlantOnly, opexPctBess,
+  });
+  let grossPlant = 0, oAndM = 0, trans = 0;
+  for (let i = 0; i < traj.length; i++) {
+    grossPlant += traj[i]!.windOnlyRevenue;
+    oAndM      += net.perStepOAndMPlant[i]!;
+    trans      += net.perStepTransPlant[i]!;
+  }
+  return grossPlant - oAndM - trans;
+}
+
+function netBreakdownForSweepPoint(
+  traj: Trajectory,
+  dt: number,
+  periodStartMs: number,
+  region: number,
+  installedMW: number,
+  opexPctPlantOnly: number,
+  opexPctBess: number,
+): { netRevenueEUR_plant: number; netRevenueEUR_bess: number; incrementalEUR: number } {
+  const net = buildNetIncrementalBreakdown({
+    traj, dt, periodStartMs, region, installedMW,
+    opexPctPlantOnly, opexPctBess,
+  });
+  let grossPlant = 0, grossBess = 0, oAndMP = 0, oAndMB = 0, transP = 0, transB = 0;
+  for (let i = 0; i < traj.length; i++) {
+    const r = traj[i]!;
+    grossPlant += r.windOnlyRevenue;
+    grossBess  += r.revenue;
+    oAndMP     += net.perStepOAndMPlant[i]!;
+    oAndMB     += net.perStepOAndMBess[i]!;
+    transP     += net.perStepTransPlant[i]!;
+    transB     += net.perStepTransBess[i]!;
+  }
+  return {
+    netRevenueEUR_plant: grossPlant - oAndMP - transP,
+    netRevenueEUR_bess:  grossBess  - oAndMB - transB,
+    incrementalEUR:      net.totalIncrementalEUR,
+  };
 }
 
 function makeSweepInputKey(
@@ -92,6 +171,7 @@ type SweepResults = { points: SweepPoint[]; scalePower: boolean; inputKey: strin
 export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
   yearOneFadePct, longTermFadePct,
+  region, opexPctPlantOnly, opexPctBess, chartEpochUtcMs,
   runOptimizeBeforeSweep,
   onSweepComplete }: {
     basePrice: number[];
@@ -104,6 +184,12 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     lifetimeYears: number;
     yearOneFadePct: number;
     longTermFadePct: number;
+    /** When set with opex, the sweep uplift matches the KPI "Incremental revenue from BESS" (net). */
+    region?: string | null;
+    opexPctPlantOnly?: number;
+    opexPctBess?: number;
+    /** UTC midnight of first calendar day; used to bucket per-month tariff costs. */
+    chartEpochUtcMs?: number;
     /** When set, clicking "Run sizing sweep" runs full dispatch optimization first, then the sweep. */
     runOptimizeBeforeSweep?: () => Promise<OptimizationRunResult | null>;
     /**
@@ -121,6 +207,13 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   const [maxCapacityX, setMaxCapacityX] = useState(4);  // sweep up to N× current cap
   const [pointCount, setPointCount] = useState(10);
   const sweepGenRef = useRef(0);
+
+  // Net-vs-gross: when a region and opex snapshot are present, the sweep
+  // uplift is computed against net revenues so the current-capacity point
+  // matches the KPI "Incremental revenue from BESS" exactly.
+  const useNet = region != null
+    && opexPctPlantOnly != null
+    && opexPctBess != null;
 
   useEffect(() => () => { sweepGenRef.current++; }, []);
 
@@ -152,6 +245,18 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     const inputKey = makeSweepInputKey(bp, bw, bpars, sweepDt, maxCapacityX, pointCount, scalePower);
     const periodToAnnual = 8760 / Math.max(1, bp.length * sweepDt);
 
+    // Net-vs-gross: when a region and opex snapshot are present, the sweep
+    // uplift is computed against net (post-OPEX, post-transmission) revenues
+    // so the current-capacity point matches the KPI "Incremental revenue
+    // from BESS" exactly. Without those, the existing gross path runs.
+    const periodStartMs = (fresh?.chartEpochUtcMs ?? chartEpochUtcMs) ?? DEFAULT_TS_EPOCH_MS;
+    const installedMW = bpars.installedCapacityMW != null && bpars.installedCapacityMW > 0
+      ? bpars.installedCapacityMW
+      : Math.max(bpars.chargeMax, bpars.dischargeMax);
+    const regionNum = useNet ? Number(region) : 0;
+    const opexPlant = useNet ? opexPctPlantOnly! : 0;
+    const opexBess  = useNet ? opexPctBess!      : 0;
+
     const gen = ++sweepGenRef.current;
     setRunning(true); setProgress(0); setResults(null);
     try {
@@ -165,14 +270,20 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       // callback payload. Max pointCount is 20 → bounded memory.
       const trajByCap = new Map<number, Trajectory>();
       // Use the same plant-only baseline as the optimiser so the current-size
-      // sweep point matches the KPI uplift exactly.
-      const baseRevenue = plantOnlyRevenue(bp, bw, bpars, sweepDt);
+      // sweep point matches the KPI uplift exactly. Net path uses a synthetic
+      // zero-battery trajectory through buildNetIncrementalBreakdown.
+      const baseRevenue = useNet
+        ? netPlantOnlyRevenue(bp, bw, bpars, sweepDt, periodStartMs, regionNum, opexPlant, opexBess)
+        : plantOnlyRevenue(bp, bw, bpars, sweepDt);
 
       for (let i = 0; i < grid.length; i++) {
         if (sweepGenRef.current !== gen) return;
         const cap = grid[i]!;
         let totalRev;
         if (cap < 1e-6) {
+          // Zero-capacity point uses the plant-only baseline as totalRev so
+          // uplift = 0 exactly (avoids the phantom-OPEX effect when
+          // opexPctBess ≠ opexPctPlantOnly and there is no battery).
           totalRev = baseRevenue;
         } else {
           // Scale charge/discharge limits proportionally if the user wants
@@ -185,7 +296,9 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           const params = { ...bpars, capacity: cap, chargeMax: cMax, dischargeMax: dMax };
           const { traj } = await runOptimizationDelegated(bp, bw, params);
           if (sweepGenRef.current !== gen) return;
-          totalRev = sweepTrajTotalRevenue(traj);
+          totalRev = useNet
+            ? netBreakdownForSweepPoint(traj, sweepDt, periodStartMs, regionNum, installedMW, opexPlant, opexBess).netRevenueEUR_bess
+            : sweepTrajTotalRevenue(traj);
           trajByCap.set(cap, traj);
         }
         out.push({
@@ -213,7 +326,8 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       let bestIdx = -1;
       for (let i = 1; i < out.length; i++) {
         const cap = out[i]!.capacity;
-        // CAPEX-aware net: same formula as the finance layer below.
+        // CAPEX-aware net: same formula as the finance layer below. p.uplift
+        // is already net when useNet, so netAnnual is the post-OPEX figure.
         const yearOneUplift = out[i]!.uplift * periodToAnnual;
         const capex = cap * 1000 * batteryCostPerKWh;
         const netAnnual = (yearOneUplift * crf) - (capex * crf);
@@ -258,7 +372,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     } finally {
       if (sweepGenRef.current === gen) setRunning(false);
     }
-  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower, batteryCostPerKWh, crf, onSweepComplete]);
+  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower, batteryCostPerKWh, crf, onSweepComplete, region, opexPctPlantOnly, opexPctBess, chartEpochUtcMs]);
 
   const onRunSizingSweep = useCallback(async () => {
     if (runOptimizeBeforeSweep) {
@@ -377,6 +491,25 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     return rows;
   }, [breakdownAnchor, fadeCurve, interestRatePct, lifetimeYears]);
 
+  // Bridge caption: makes the period -> annualized -> fade conversion explicit
+  // so the year-1 table value (annualized x fade) can be reconciled with the
+  // KPI "Incremental revenue from BESS" (period net uplift). periodToAnnual is
+  // derived from the anchor point itself (yearOneUplift / uplift) so it stays
+  // correct regardless of which anchor (optimal vs current) is active.
+  const breakdownCaption = useMemo(() => {
+    if (!breakdownAnchor || !breakdownRows || !breakdownRows.length) return null;
+    const periodUplift = breakdownAnchor.uplift;
+    const periodToAnnual = periodUplift !== 0 ? breakdownAnchor.yearOneUplift / periodUplift : 0;
+    const periodHours = periodToAnnual > 0 ? Math.round(8760 / periodToAnnual) : 0;
+    return {
+      periodUplift,
+      periodToAnnual,
+      periodHours,
+      year1RetAvg: breakdownRows[0]!.retAvg,
+      year1Rev: breakdownRows[0]!.yearRev,
+    };
+  }, [breakdownAnchor, breakdownRows]);
+
   return (
     <>
       <FullScreenJobOverlay
@@ -460,7 +593,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                   <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-faint)] font-mono mb-1">Customer ROI view</div>
                   <div className="font-display text-lg">Net annual benefit vs installed MWh</div>
                   <div className="text-[10px] font-mono text-[color:var(--text-faint)] mt-2">
-                    Financing spread {(crf * 100).toFixed(2)}% of CAPEX · life {lifetimeYears} yr · fade weight {(fadeNpvFactor * 100).toFixed(1)}%
+                    Financing spread {(crf * 100).toFixed(2)}% of CAPEX · life {lifetimeYears} yr · fade weight {(fadeNpvFactor * 100).toFixed(1)}%{useNet ? ' · OPEX/net applied' : ''}
                   </div>
                 </div>
               </div>
@@ -551,7 +684,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                               display: 'grid', gridTemplateColumns: 'auto auto',
                               gap: '2px 16px'
                             }}>
-                              <span style={{ color: 'var(--accent-teal)' }}>annual marginal benefit</span>
+                              <span style={{ color: 'var(--accent-teal)' }}>{useNet ? 'annual net marginal benefit' : 'annual marginal benefit'}</span>
                               <span style={{ textAlign: 'right' }}>{fmtMoney(p.annualUplift)}</span>
                               <span style={{ color: 'var(--accent-amber)' }}>annual capex</span>
                               <span style={{ textAlign: 'right' }}>−{fmtMoney(p.annualCapex)}</span>
@@ -574,7 +707,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                       }}
                     />
                     <ReferenceLine y={0} stroke="var(--border-strong)" strokeDasharray="3 3" />
-                    <Line type="monotone" dataKey="annualUplift" name="annual marginal benefit"
+                    <Line type="monotone" dataKey="annualUplift" name={useNet ? 'annual net marginal benefit' : 'annual marginal benefit'}
                       stroke="var(--accent-teal)" strokeWidth={1.5}
                       strokeDasharray="4 4"
                       dot={{ fill: 'var(--accent-teal)', r: 2, strokeWidth: 0 }} />
@@ -622,7 +755,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                     height: 1.5, background: 'var(--accent-teal)',
                     backgroundImage: 'repeating-linear-gradient(90deg, var(--accent-teal) 0 4px, transparent 4px 8px)'
                   }}></span>
-                  annual marginal benefit (revenue)
+                  {useNet ? 'annual net marginal benefit (post-OPEX)' : 'annual marginal benefit (revenue)'}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-3" style={{
@@ -698,8 +831,25 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                       current ({baseParams.capacity.toFixed(0)} MWh)
                     </button>
                   </div>
-                )}
-              </div>
+              )}
+            </div>
+
+              {breakdownCaption && (
+                <div className="text-[10px] font-mono text-[color:var(--text-faint)] mb-4"
+                  style={{ lineHeight: 1.7, letterSpacing: '0.02em' }}>
+                  Period uplift{' '}
+                  <span style={{ color: 'var(--text)' }}>{fmtMoney(breakdownCaption.periodUplift)}</span>
+                  {' × '}annualization{' '}
+                  <span style={{ color: 'var(--accent-teal)' }}>{breakdownCaption.periodToAnnual.toFixed(4)}</span>
+                  {' '}(8760÷{breakdownCaption.periodHours}h)
+                  {' × '}year-1 retention{' '}
+                  <span style={{ color: 'var(--accent-rose)' }}>
+                    {(breakdownCaption.year1RetAvg * 100).toFixed(2)}%
+                  </span>
+                  {' → '}year-1{' '}
+                  <span style={{ color: 'var(--accent-amber)' }}>{fmtMoney(breakdownCaption.year1Rev)}</span>
+                </div>
+              )}
 
               {/* ---- The fade-curve chart proper ---- */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
@@ -767,13 +917,13 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                                 color: 'var(--text-dim)', fontSize: 10, marginBottom: 4,
                                 textTransform: 'uppercase', letterSpacing: '0.05em'
                               }}>year {p.year}</div>
-                              <div>nominal: <span style={{ color: 'var(--accent-amber)' }}>{fmtMoney(p.yearRev)}</span></div>
+                              <div>nominal (ann.): <span style={{ color: 'var(--accent-amber)' }}>{fmtMoney(p.yearRev)}</span></div>
                               <div>discount factor: <span style={{ color: 'var(--accent-violet)' }}>{p.discFac.toFixed(4)}</span></div>
                               <div>present value: <span style={{ color: 'var(--accent-green)' }}>{fmtMoney(p.discRev)}</span></div>
                             </div>
                           );
                         }} />
-                        <Bar dataKey="yearRev" name="nominal €" fill="var(--accent-amber)" fillOpacity={0.35} />
+                        <Bar dataKey="yearRev" name="nominal € (annualized)" fill="var(--accent-amber)" fillOpacity={0.35} />
                         <Bar dataKey="discRev" name="discounted €" fill="var(--accent-green)" fillOpacity={0.85} />
                       </ComposedChart>
                     </ResponsiveContainer>
@@ -803,7 +953,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
                         {[
                           ['year', 'Year'],
                           ['retention', 'Retention'],
-                          ['year-rev', 'Year revenue'],
+                          ['year-rev', 'Year revenue (annualized)'],
                           ['disc-fac', 'Discount'],
                           ['pv', 'Present value'],
                           ['cum-pv', 'Cumulative PV'],
