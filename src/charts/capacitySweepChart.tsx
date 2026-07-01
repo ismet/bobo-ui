@@ -233,6 +233,21 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     });
   }, [currentInputKey, onSweepComplete]);
 
+  // Capacity fade curve & multi-year NPV factor for Option B.
+  // fadeNpvFactor multiplies a "year-1 uplift" to give the levelised annual
+  // uplift over the lifetime, accounting for both fade and time discounting.
+  // With no fade (all retention = 1) this collapses to 1 (CRF × annuity = 1).
+  const { fadeNpvFactor, fadeCurve } = useMemo(() => {
+    const curve = buildFadeCurve(lifetimeYears, yearOneFadePct, longTermFadePct);
+    const i = interestRatePct / 100;
+    let npvWeight = 0;
+    for (let y = 1; y <= lifetimeYears; y++) {
+      const ret = (curve[y - 1] + curve[y]) / 2;
+      npvWeight += ret / Math.pow(1 + i, y);
+    }
+    return { fadeNpvFactor: npvWeight * crf, fadeCurve: curve };
+  }, [lifetimeYears, yearOneFadePct, longTermFadePct, interestRatePct, crf]);
+
   const runSweep = useCallback(async (fresh?: OptimizationRunResult | null) => {
     const bp = fresh?.pricePeriod ?? basePrice;
     const bw = fresh?.windPeriod ?? baseWind;
@@ -326,7 +341,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
         // is already net when useNet, so netAnnual is the post-OPEX figure.
         const yearOneUplift = out[i]!.uplift * periodToAnnual;
         const capex = cap * 1000 * batteryCostPerKWh;
-        const netAnnual = (yearOneUplift * crf) - (capex * crf);
+        const netAnnual = (yearOneUplift * fadeNpvFactor) - (capex * crf);
         if (netAnnual > bestNet) { bestNet = netAnnual; bestIdx = i; }
       }
       if (bestIdx > 0 && bestNet > 0) {
@@ -368,7 +383,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     } finally {
       if (sweepGenRef.current === gen) setRunning(false);
     }
-  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower, batteryCostPerKWh, crf, onSweepComplete, region, opexPctPlantOnly, chartEpochUtcMs]);
+  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower, batteryCostPerKWh, crf, fadeNpvFactor, onSweepComplete, region, opexPctPlantOnly, chartEpochUtcMs]);
 
   const onRunSizingSweep = useCallback(async () => {
     if (runOptimizeBeforeSweep) {
@@ -379,22 +394,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       await runSweep();
     }
   }, [runOptimizeBeforeSweep, runSweep]);
-
-  // Capacity fade curve & multi-year NPV factor for Option B.
-  // fadeNpvFactor multiplies a "year-1 uplift" to give the levelised annual
-  // uplift over the lifetime, accounting for both fade and time discounting.
-  // With no fade (all retention = 1) this collapses to 1 (CRF × annuity = 1).
-  const { fadeNpvFactor, fadeCurve } = useMemo(() => {
-    const curve = buildFadeCurve(lifetimeYears, yearOneFadePct, longTermFadePct);
-    const i = interestRatePct / 100;
-    let npvWeight = 0;
-    for (let y = 1; y <= lifetimeYears; y++) {
-      // retention at the start of year y → average over the year
-      const ret = (curve[y - 1] + curve[y]) / 2;
-      npvWeight += ret / Math.pow(1 + i, y);
-    }
-    return { fadeNpvFactor: npvWeight * crf, fadeCurve: curve };
-  }, [lifetimeYears, yearOneFadePct, longTermFadePct, interestRatePct, crf]);
 
   // Finance-augmented sweep points: derived without re-running the DP.
   // This means the user can drag battery cost / interest rate / lifetime / fade
