@@ -2,3 +2,7 @@
 .env.local
 node_modules/
 dist/
+.opencode/
+.cursor/
+.commandcode/
+opencode.json

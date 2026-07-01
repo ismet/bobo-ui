@@ -19,4 +19,12 @@ export default defineConfig({
   preview: {
     proxy: boboApiProxy,
   },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => (id.includes('node_modules') ? 'vendor' : undefined),
+      },
+    },
+  },
 });
