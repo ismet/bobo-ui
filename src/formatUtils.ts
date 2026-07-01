@@ -6,8 +6,8 @@ export function fmtNumber(x: number, digits = 0): string {
   if (!isFinite(x)) return '—';
   const sign = x < 0 ? '-' : '';
   const ax = Math.abs(x);
-  if (ax >= 1e6) return sign + (ax / 1e6).toFixed(digits >= 2 ? 2 : 2) + 'M';
-  if (ax >= 1e3) return sign + (ax / 1e3).toFixed(digits >= 1 ? 1 : 1) + 'k';
+  if (ax >= 1e6) return sign + (ax / 1e6).toFixed(2) + 'M';
+  if (ax >= 1e3) return sign + (ax / 1e3).toFixed(1) + 'k';
   return sign + ax.toFixed(digits);
 }
 
