@@ -87,8 +87,8 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
 
   // ---- Financial parameters --------------------------------------------------
   // Battery cost: € per kWh of energy capacity (industry-standard quoting).
-  //   2024 typical Li-ion utility-scale cost: ~250–350 €/kWh (BNEF, NREL).
-  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(155); // €/kWh (draft)
+  //   Default reflects aggressive near-term LFP utility-scale pricing (~90 €/kWh vs. 2024 BNEF volume-weighted ~115 $/kWh global average).
+  const [batteryCostPerKWh, setBatteryCostPerKWh] = useState(90); // €/kWh (draft)
   const [interestRatePct, setInterestRatePct] = useState(9.5); // % (draft)
   const [lifetimeYears, setLifetimeYears] = useState(20);  // years (draft)
 
@@ -96,7 +96,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   // Display-only for now; helper text in the UI flags that they are not yet
   // wired into KPI, sweep, or net-revenue math.
   const [opexPctPlantOnly, setOpexPctPlantOnly] = useState(15); // % (draft)
-  const [opexPctBess, setOpexPctBess] = useState(15);          // % (draft)
 
   // Capital recovery factor: CRF = i(1+i)^n / ((1+i)^n - 1)
   // For i = 9.5%, n = 20 → CRF ≈ 0.1142 (each € of CAPEX costs €0.1142/yr).
@@ -143,7 +142,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
   const [appliedLongTermFadePct, setAppliedLongTermFadePct] = useState<number | null>(null);
   const [appliedRegion, setAppliedRegion] = useState<string | null>(null);
   const [appliedOpexPctPlantOnly, setAppliedOpexPctPlantOnly] = useState<number | null>(null);
-  const [appliedOpexPctBess, setAppliedOpexPctBess] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   /** Bumped only after a successful optimize commit; drives deferred overlay dismiss after charts paint. */
   const [optimizeOverlayDismissTick, setOptimizeOverlayDismissTick] = useState(0);
@@ -200,7 +198,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       pvWideGap,
       pvPeakFactor,
       opexPctPlantOnly,
-      opexPctBess,
     ].join('|');
   }, [
     customData,
@@ -230,7 +227,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     pvWideGap,
     pvPeakFactor,
     opexPctPlantOnly,
-    opexPctBess,
   ]);
 
   const hasPendingChanges = appliedScenarioKey == null || appliedScenarioKey !== draftScenarioKey;
@@ -318,7 +314,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     setAppliedLongTermFadePct(null);
     setAppliedRegion(null);
     setAppliedOpexPctPlantOnly(null);
-    setAppliedOpexPctBess(null);
     setSweepOptimalResult(null);
   }, []);
 
@@ -484,7 +479,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     const snapLongTermFadePct = longTermFadePct;
     const snapSelectedRegion = selectedRegion;
     const snapOpexPctPlantOnly = opexPctPlantOnly;
-    const snapOpexPctBess = opexPctBess;
 
     const snapPvReconstructEnabled = pvReconstructEnabled;
     const snapClippingLimitMW = clippingLimitMW;
@@ -588,7 +582,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
       setAppliedLongTermFadePct(snapLongTermFadePct);
       setAppliedRegion(snapSelectedRegion);
       setAppliedOpexPctPlantOnly(snapOpexPctPlantOnly);
-      setAppliedOpexPctBess(snapOpexPctBess);
       setAppliedResult(applied);
       // New optimize commit invalidates any cached sweep optimum.
       setSweepOptimalResult(null);
@@ -629,7 +622,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
     pvWideGap,
     pvPeakFactor,
     opexPctPlantOnly,
-    opexPctBess,
     draftScenarioKey,
   ]);
 
@@ -871,8 +863,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                 selectedRegion={selectedRegion}
                 opexPctPlantOnly={opexPctPlantOnly}
                 setOpexPctPlantOnly={setOpexPctPlantOnly}
-                opexPctBess={opexPctBess}
-                setOpexPctBess={setOpexPctBess}
               />
               <DegradationCard
                 wearCost={wearCost} setWearCost={setWearCost}
@@ -915,8 +905,7 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
               {spotWindChartProps && <ChartsPanel {...spotWindChartProps} />}
               {customData && <TotalGenerationCard customData={customData} appliedResult={appliedResult} />}
               {appliedResult && <KPIRow result={appliedResult} region={appliedRegion}
-                opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
-                opexPctBess={appliedOpexPctBess ?? opexPctBess} />}
+                opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly} />}
               {appliedResult && <PvGenerationCompareChart result={appliedResult} />}
               {appliedResult && (
                 <>
@@ -942,7 +931,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     result={appliedResult}
                     region={appliedRegion}
                     opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
-                    opexPctBess={appliedOpexPctBess ?? opexPctBess}
                   />
 
                   <div className="my-10"></div>
@@ -975,7 +963,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     longTermFadePct={appliedLongTermFadePct ?? longTermFadePct}
                     region={appliedRegion}
                     opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
-                    opexPctBess={appliedOpexPctBess ?? opexPctBess}
                     chartEpochUtcMs={appliedResult.chartEpochUtcMs}
                   />
 
@@ -989,7 +976,6 @@ export default function App({ onLogout }: { onLogout?: () => void }) {
                     sweepResult={sweepOptimalResult}
                     region={appliedRegion}
                     opexPctPlantOnly={appliedOpexPctPlantOnly ?? opexPctPlantOnly}
-                    opexPctBess={appliedOpexPctBess ?? opexPctBess}
                   />
 
                   {/* <div className="my-10"></div>

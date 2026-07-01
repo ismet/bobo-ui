@@ -74,11 +74,10 @@ function FinancialBreakdownCell({ label, value, tone }: {
   );
 }
 
-export const KPIRow = memo(({ result, region, opexPctPlantOnly, opexPctBess }: {
+export const KPIRow = memo(({ result, region, opexPctPlantOnly }: {
   result: OptimizationRunResult;
   region: string | null;
   opexPctPlantOnly: number;
-  opexPctBess: number;
 }) => {
   const { traj, dt } = result;
   const stats = useMemo(() => {
@@ -164,7 +163,6 @@ export const KPIRow = memo(({ result, region, opexPctPlantOnly, opexPctBess }: {
       installedMW: result.params.installedCapacityMW
                     ?? Math.max(result.params.chargeMax, result.params.dischargeMax),
       opexPctPlantOnly,
-      opexPctBess,
     });
     return {
       grossRevenueEUR: b.grossRevenueEUR,
@@ -181,7 +179,7 @@ export const KPIRow = memo(({ result, region, opexPctPlantOnly, opexPctBess }: {
       netRevenueEUR_bess: b.netRevenueEUR_bess,
       incrementalEUR: b.incrementalEUR,
     };
-  }, [traj, result, region, opexPctPlantOnly, opexPctBess]);
+  }, [traj, result, region, opexPctPlantOnly]);
 
   const incrValue = breakdown.incrementalEUR;
   let incrPct: number | null = null;
@@ -619,11 +617,10 @@ export const BatteryVsPriceChart = memo(({ result }: { result: OptimizationRunRe
 });
 
 // ---- CHART 3: Cumulative revenue (with vs without battery) ----
-export const UpliftChart = memo(({ result, region, opexPctPlantOnly, opexPctBess }: {
+export const UpliftChart = memo(({ result, region, opexPctPlantOnly }: {
   result: OptimizationRunResult;
   region: string | null;
   opexPctPlantOnly: number;
-  opexPctBess: number;
 }) => {
   const { traj, dt } = result;
   const installedMW = result.params.installedCapacityMW != null
@@ -634,8 +631,8 @@ export const UpliftChart = memo(({ result, region, opexPctPlantOnly, opexPctBess
     periodStartMs: result.chartEpochUtcMs ?? DEFAULT_TS_EPOCH_MS,
     region: region != null ? Number(region) : null,
     installedMW,
-    opexPctPlantOnly, opexPctBess,
-  }), [traj, dt, result.chartEpochUtcMs, region, installedMW, opexPctPlantOnly, opexPctBess]);
+    opexPctPlantOnly,
+  }), [traj, dt, result.chartEpochUtcMs, region, installedMW, opexPctPlantOnly]);
   const cumul = useMemo(() => {
     let cumGross = 0, cumPlant = 0;
     let cumOAndMP = 0, cumOAndMB = 0;

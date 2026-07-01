@@ -49,8 +49,7 @@ function operationColsFor(result: OptimizationRunResult): string[] {
 function buildOperationTable(result: OptimizationRunResult, opts: {
   region: string | null;
   opexPctPlantOnly: number;
-  opexPctBess: number;
-} = { region: null, opexPctPlantOnly: 0, opexPctBess: 0 }): OpRow[] {
+} = { region: null, opexPctPlantOnly: 0 }): OpRow[] {
   const { traj, dt, params, windPeriodMeasured } = result;
   const { capacity, chargeEff, dischargeEff, wearCost = 0 } = params;
   const showPvGeneration = windPeriodMeasured != null
@@ -76,7 +75,6 @@ function buildOperationTable(result: OptimizationRunResult, opts: {
     region: opts.region != null ? Number(opts.region) : null,
     installedMW,
     opexPctPlantOnly: opts.opexPctPlantOnly,
-    opexPctBess: opts.opexPctBess,
   });
 
   const rows: OpRow[] = [];
@@ -208,7 +206,7 @@ const pageBtnStyle = (disabled: boolean) => ({
   cursor: disabled ? 'not-allowed' : 'pointer'
 });
 
-export const OutputTable = memo(({ result, sweepResult, region, opexPctPlantOnly, opexPctBess }: {
+export const OutputTable = memo(({ result, sweepResult, region, opexPctPlantOnly }: {
   result: OptimizationRunResult;
   /**
    * When provided, the table is built from this dispatch instead of
@@ -221,7 +219,6 @@ export const OutputTable = memo(({ result, sweepResult, region, opexPctPlantOnly
   /** When set, the 'marginal_benefit_vs_wind_only' column shows net (post-OPEX, post-transmission). */
   region: string | null;
   opexPctPlantOnly: number;
-  opexPctBess: number;
 }) => {
   // Effective result drives all table data. When the sweep provides a
   // non-null optimal-size dispatch we use that; otherwise we fall back to
@@ -238,8 +235,8 @@ export const OutputTable = memo(({ result, sweepResult, region, opexPctPlantOnly
       ? 'marginal_benefit_vs_wind_only_net'
       : c
   ), [operationCols, region]);
-  const rows = useMemo(() => buildOperationTable(effective, { region, opexPctPlantOnly, opexPctBess }),
-    [effective, region, opexPctPlantOnly, opexPctBess]);
+  const rows = useMemo(() => buildOperationTable(effective, { region, opexPctPlantOnly }),
+    [effective, region, opexPctPlantOnly]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [copyMsg, setCopyMsg] = useState('');

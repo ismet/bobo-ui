@@ -16,7 +16,6 @@ export function computeTariffBreakdown(args: {
   region: number;
   installedMW: number;
   opexPctPlantOnly: number;
-  opexPctBess: number;
 }): {
   grossRevenueEUR: number;
   hybridRevenueEUR: number;
@@ -36,10 +35,10 @@ export function computeTariffBreakdown(args: {
   monthsTotal: number;
   yearLabel: string;
 } {
-  const { traj, dt, periodStartMs, region, installedMW, opexPctPlantOnly, opexPctBess } = args;
+  const { traj, dt, periodStartMs, region, installedMW, opexPctPlantOnly } = args;
 
   const { perMonth, monthsTouched, monthsBilled, years } = computePerMonthNetDiff(
-    traj, dt, periodStartMs, region, installedMW, opexPctPlantOnly, opexPctBess,
+    traj, dt, periodStartMs, region, installedMW, opexPctPlantOnly,
   );
 
   let oAndMEUR_plant = 0, oAndMEUR_bess = 0;
@@ -109,7 +108,6 @@ function computePerMonthNetDiff(
   region: number,
   installedMW: number,
   opexPctPlantOnly: number,
-  opexPctBess: number,
 ): { perMonth: Map<string, MonthBucket>; monthsTouched: number; monthsBilled: number; years: Set<number> } {
   const perMonth = new Map<string, MonthBucket>();
   let monthsTouched = 0;
@@ -140,7 +138,7 @@ function computePerMonthNetDiff(
     b.plantGrossEUR  += r.windOnlyRevenue;
     b.bessGrossEUR   += r.revenue;
     b.oAndMPlantEUR  += (opexPctPlantOnly / 100) * r.windOnlyRevenue;
-    b.oAndMBessEUR   += (opexPctBess      / 100) * r.revenue;
+    b.oAndMBessEUR   += (opexPctPlantOnly / 100) * r.windOnlyRevenue;
     b.stepIndices.push(i);
   }
 
@@ -185,7 +183,6 @@ export function buildNetIncrementalBreakdown(args: {
   region: number | null;
   installedMW: number;
   opexPctPlantOnly: number;
-  opexPctBess: number;
 }): NetIncrementalBreakdown {
   const { traj, dt, region } = args;
   const n = traj.length;
@@ -202,7 +199,7 @@ export function buildNetIncrementalBreakdown(args: {
 
   const { perMonth } = computePerMonthNetDiff(
     traj, dt, args.periodStartMs, region, args.installedMW,
-    args.opexPctPlantOnly, args.opexPctBess,
+    args.opexPctPlantOnly,
   );
 
   const perStepOAndMPlant = new Array(n).fill(0);
@@ -212,8 +209,9 @@ export function buildNetIncrementalBreakdown(args: {
 
   for (let i = 0; i < n; i++) {
     const r = traj[i];
-    perStepOAndMPlant[i] = (args.opexPctPlantOnly / 100) * r.windOnlyRevenue;
-    perStepOAndMBess[i]  = (args.opexPctBess      / 100) * r.revenue;
+    const oAndMStep = (args.opexPctPlantOnly / 100) * r.windOnlyRevenue;
+    perStepOAndMPlant[i] = oAndMStep;
+    perStepOAndMBess[i]  = oAndMStep;
   }
 
   for (const [, b] of perMonth) {
@@ -232,7 +230,6 @@ export function buildNetIncrementalBreakdown(args: {
     traj, dt, periodStartMs: args.periodStartMs, region,
     installedMW: args.installedMW,
     opexPctPlantOnly: args.opexPctPlantOnly,
-    opexPctBess: args.opexPctBess,
   }).incrementalEUR;
 
   if (import.meta.env.DEV) {

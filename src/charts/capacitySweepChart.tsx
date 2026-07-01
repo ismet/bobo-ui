@@ -38,8 +38,9 @@ function plantOnlyRevenue(price: number[], wind: number[], params: OptimizationP
 
 // Plant-only synthetic trajectory → netRevenueEUR_plant via buildNetIncrementalBreakdown.
 // For this trajectory bessExportMWh === plantExportMWh everywhere, so
-// transBess_ym === transPlant_ym per month and the only diff is the O&M pct
-// (a phantom effect avoided by the sweep loop's zero-capacity rule).
+// transBess_ym === transPlant_ym per month and the per-step O&M arrays are
+// equal too — netRevenueEUR_plant anchors the zero-capacity sweep point so the
+// BESS uplift starts at 0.
 function netPlantOnlyRevenue(
   price: number[],
   wind: number[],
@@ -48,7 +49,6 @@ function netPlantOnlyRevenue(
   periodStartMs: number,
   region: number,
   opexPctPlantOnly: number,
-  opexPctBess: number,
 ): number {
   const gridLimit = bpars.installedCapacityMW != null && bpars.installedCapacityMW > 0
     ? bpars.installedCapacityMW
@@ -73,7 +73,7 @@ function netPlantOnlyRevenue(
     : Math.max(bpars.chargeMax, bpars.dischargeMax);
   const net = buildNetIncrementalBreakdown({
     traj, dt, periodStartMs, region, installedMW,
-    opexPctPlantOnly, opexPctBess,
+    opexPctPlantOnly,
   });
   let grossPlant = 0, oAndM = 0, trans = 0;
   for (let i = 0; i < traj.length; i++) {
@@ -91,11 +91,10 @@ function netBreakdownForSweepPoint(
   region: number,
   installedMW: number,
   opexPctPlantOnly: number,
-  opexPctBess: number,
 ): { netRevenueEUR_plant: number; netRevenueEUR_bess: number; incrementalEUR: number } {
   const net = buildNetIncrementalBreakdown({
     traj, dt, periodStartMs, region, installedMW,
-    opexPctPlantOnly, opexPctBess,
+    opexPctPlantOnly,
   });
   let grossPlant = 0, grossBess = 0, oAndMP = 0, oAndMB = 0, transP = 0, transB = 0;
   for (let i = 0; i < traj.length; i++) {
@@ -171,7 +170,7 @@ type SweepResults = { points: SweepPoint[]; scalePower: boolean; inputKey: strin
 export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   batteryCostPerKWh, crf, interestRatePct, lifetimeYears,
   yearOneFadePct, longTermFadePct,
-  region, opexPctPlantOnly, opexPctBess, chartEpochUtcMs,
+  region, opexPctPlantOnly, chartEpochUtcMs,
   runOptimizeBeforeSweep,
   onSweepComplete }: {
     basePrice: number[];
@@ -187,7 +186,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     /** When set with opex, the sweep uplift matches the KPI "Incremental revenue from BESS" (net). */
     region?: string | null;
     opexPctPlantOnly?: number;
-    opexPctBess?: number;
     /** UTC midnight of first calendar day; used to bucket per-month tariff costs. */
     chartEpochUtcMs?: number;
     /** When set, clicking "Run sizing sweep" runs full dispatch optimization first, then the sweep. */
@@ -212,8 +210,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
   // uplift is computed against net revenues so the current-capacity point
   // matches the KPI "Incremental revenue from BESS" exactly.
   const useNet = region != null
-    && opexPctPlantOnly != null
-    && opexPctBess != null;
+    && opexPctPlantOnly != null;
 
   useEffect(() => () => { sweepGenRef.current++; }, []);
 
@@ -255,7 +252,6 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       : Math.max(bpars.chargeMax, bpars.dischargeMax);
     const regionNum = useNet ? Number(region) : 0;
     const opexPlant = useNet ? opexPctPlantOnly! : 0;
-    const opexBess  = useNet ? opexPctBess!      : 0;
 
     const gen = ++sweepGenRef.current;
     setRunning(true); setProgress(0); setResults(null);
@@ -273,7 +269,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
       // sweep point matches the KPI uplift exactly. Net path uses a synthetic
       // zero-battery trajectory through buildNetIncrementalBreakdown.
       const baseRevenue = useNet
-        ? netPlantOnlyRevenue(bp, bw, bpars, sweepDt, periodStartMs, regionNum, opexPlant, opexBess)
+        ? netPlantOnlyRevenue(bp, bw, bpars, sweepDt, periodStartMs, regionNum, opexPlant)
         : plantOnlyRevenue(bp, bw, bpars, sweepDt);
 
       for (let i = 0; i < grid.length; i++) {
@@ -282,8 +278,8 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
         let totalRev;
         if (cap < 1e-6) {
           // Zero-capacity point uses the plant-only baseline as totalRev so
-          // uplift = 0 exactly (avoids the phantom-OPEX effect when
-          // opexPctBess ≠ opexPctPlantOnly and there is no battery).
+          // uplift = 0 exactly (BESS NET == Plant NET at zero capacity by
+          // construction since O&M mirrors plant O&M).
           totalRev = baseRevenue;
         } else {
           // Scale charge/discharge limits proportionally if the user wants
@@ -297,7 +293,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
           const { traj } = await runOptimizationDelegated(bp, bw, params);
           if (sweepGenRef.current !== gen) return;
           totalRev = useNet
-            ? netBreakdownForSweepPoint(traj, sweepDt, periodStartMs, regionNum, installedMW, opexPlant, opexBess).netRevenueEUR_bess
+            ? netBreakdownForSweepPoint(traj, sweepDt, periodStartMs, regionNum, installedMW, opexPlant).netRevenueEUR_bess
             : sweepTrajTotalRevenue(traj);
           trajByCap.set(cap, traj);
         }
@@ -372,7 +368,7 @@ export const CapacitySweepChart = memo(({ basePrice, baseWind, baseParams, dt,
     } finally {
       if (sweepGenRef.current === gen) setRunning(false);
     }
-  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower, batteryCostPerKWh, crf, onSweepComplete, region, opexPctPlantOnly, opexPctBess, chartEpochUtcMs]);
+  }, [basePrice, baseWind, baseParams, dt, maxCapacityX, pointCount, scalePower, batteryCostPerKWh, crf, onSweepComplete, region, opexPctPlantOnly, chartEpochUtcMs]);
 
   const onRunSizingSweep = useCallback(async () => {
     if (runOptimizeBeforeSweep) {

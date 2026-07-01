@@ -30,8 +30,6 @@ export const EconomicsCard = memo(
     selectedRegion,
     opexPctPlantOnly,
     setOpexPctPlantOnly,
-    opexPctBess,
-    setOpexPctBess,
   }: {
     batteryCostPerKWh: number;
     setBatteryCostPerKWh: (v: number) => void;
@@ -46,8 +44,6 @@ export const EconomicsCard = memo(
     selectedRegion: string | null;
     opexPctPlantOnly: number;
     setOpexPctPlantOnly: (v: number) => void;
-    opexPctBess: number;
-    setOpexPctBess: (v: number) => void;
   }) => {
     const capexK = batteryCostPerKWh * capacity; // €/MWh × MWh = € (since €/kWh × MWh × 1000 / 1000 = €/kWh × MWh? no)
     // Actually: cost is €/kWh, capacity is MWh. CAPEX [€] = cost [€/kWh] × capacity [MWh] × 1000 [kWh/MWh]
@@ -201,10 +197,7 @@ export const EconomicsCard = memo(
             }}
           >
             <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
-              OPEX Plant-only{" "}
-              <span className="text-[color:var(--text-faint)]">
-                % of gross revenue
-              </span>
+              OPEX (% of gross revenue)
             </label>
             <input
               type="number"
@@ -221,33 +214,6 @@ export const EconomicsCard = memo(
               onBlur={(e) => {
                 const v = Number(e.target.value) || 0;
                 setOpexPctPlantOnly(
-                  Math.min(30, Math.max(0, Math.round(v * 2) / 2)),
-                );
-              }}
-              className="num-input"
-            />
-
-            <label className="text-[11px] uppercase tracking-wider text-[color:var(--text-dim)] font-mono">
-              OPEX with BESS{" "}
-              <span className="text-[color:var(--text-faint)]">
-                % of gross revenue
-              </span>
-            </label>
-            <input
-              type="number"
-              value={opexPctBess}
-              min={0}
-              max={30}
-              step={0.5}
-              onChange={(e) => {
-                const v = Number(e.target.value) || 0;
-                setOpexPctBess(
-                  Math.min(30, Math.max(0, Math.round(v * 2) / 2)),
-                );
-              }}
-              onBlur={(e) => {
-                const v = Number(e.target.value) || 0;
-                setOpexPctBess(
                   Math.min(30, Math.max(0, Math.round(v * 2) / 2)),
                 );
               }}
