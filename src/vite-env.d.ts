@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** JSON array: [{"username":"…","password":"…"}, …] — set at build time (Render env vars). */
+  /** JSON array: [{"username":"…","password":"…"}, …] — set at build time (env vars). */
   readonly VITE_AUTH_USERS?: string;
 }
 

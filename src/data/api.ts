@@ -1,8 +1,8 @@
-const REMOTE_API = 'https://bobo-api.onrender.com';
+const REMOTE_API = 'http://185.114.48.111:8282';
 
 /**
  * Base URL for bobo-api requests from the browser.
- * In dev/preview, default `/api` is proxied to Render (vite.config.ts) to avoid CORS.
+ * In dev/preview, default `/api` is proxied to the backend (vite.config.ts) to avoid CORS during dev.
  * Production builds use the remote URL unless VITE_BOBO_API_BASE is set.
  */
 export const BOBO_API_BASE = (
