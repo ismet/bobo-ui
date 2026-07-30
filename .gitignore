@@ -6,3 +6,4 @@ dist/
 .cursor/
 .commandcode/
 opencode.json
+.wrangler/
