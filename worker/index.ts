@@ -2,7 +2,11 @@ interface Env {
   ASSETS: { fetch: (request: Request | string | URL) => Promise<Response> };
 }
 
-const BACKEND_HOST = '185.114.48.111:8282';
+// Workers subrequests cannot use bare-IP URLs (documented platform limitation:
+// https://developers.cloudflare.com/workers/platform/known-issues/#fetch-to-ip-addresses).
+// sslip.io resolves "<a>.<b>.<c>.<d>.sslip.io" to that IP via DNS, so we use a
+// hostname instead of an IP literal in the outbound URL.
+const BACKEND_HOST = '185.114.48.111.sslip.io:8282';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -12,11 +16,7 @@ export default {
       target.protocol = 'http:';
       target.host = BACKEND_HOST;
       target.pathname = url.pathname.replace(/^\/api/, '') || '/';
-      const headers = new Headers(request.headers);
-      headers.set('Host', BACKEND_HOST);
-      headers.delete('Origin');
-      headers.delete('Referer');
-      const backendReq = new Request(target, { method: request.method, headers, body: request.body });
+      const backendReq = new Request(target, request);
       return fetch(backendReq);
     }
     return env.ASSETS.fetch(request);
