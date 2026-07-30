@@ -12,7 +12,11 @@ export default {
       target.protocol = 'http:';
       target.host = BACKEND_HOST;
       target.pathname = url.pathname.replace(/^\/api/, '') || '/';
-      const backendReq = new Request(target, request);
+      const headers = new Headers(request.headers);
+      headers.set('Host', BACKEND_HOST);
+      headers.delete('Origin');
+      headers.delete('Referer');
+      const backendReq = new Request(target, { method: request.method, headers, body: request.body });
       return fetch(backendReq);
     }
     return env.ASSETS.fetch(request);
