@@ -2,6 +2,9 @@
   "name": "bataryaopt",
   "compatibility_date": "2026-07-30",
   "main": "./worker/index.ts",
+  "routes": [
+    { "pattern": "bataryaopt.insposoft.com", "custom_domain": true }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
