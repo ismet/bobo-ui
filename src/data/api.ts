@@ -1,4 +1,4 @@
-const REMOTE_API = 'http://45.146.4.98:8282';
+const REMOTE_API = 'https://epias-data-provider.insposoft.com';
 
 /**
  * Base URL for bobo-api requests from the browser.

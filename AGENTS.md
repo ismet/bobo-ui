@@ -43,6 +43,7 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
 | `src/vite-env.d.ts` | `ImportMetaEnv.VITE_AUTH_USERS` typing |
 | `css/utilities.css`, `css/theme.css` | Utility classes + design tokens |
 | `teias_tariff_dataset.json`, `eur_try.json` | Static reference data imported by `src/finance.ts` (committed). |
+| `worker/index.ts`, `wrangler.jsonc` | Cloudflare Worker: serves `./dist` (SPA) at `bataryaopt.insposoft.com`, proxies `/api` to the backend |
 | `scripts/` | `benchmark-dp.ts`, `dp-worker-thread.ts`, `verify-ui.mjs` |
 | **Large files** (use `Read` with offset) | `src/app.tsx` 1030 · `src/charts/capacitySweepChart.tsx` 1025 · `src/charts/resultCharts.tsx` 797 · `src/panels/economicsDegradation.tsx` 750 · `src/panels/dataInputPanels.tsx` 413 lines |
 
@@ -59,15 +60,15 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
   - When `VITE_AUTH_USERS` is missing/empty, the login screen surfaces a "not configured" error.
   - **localStorage keys** (in `src/auth.ts`): `bataryaopt-auth` = `'1'` when logged in; `bataryaopt-auth-at` = last-activity ms (epoch). `touchActivity()` is throttled to 1 s. Manipulate via the auth helpers, not by writing these keys directly.
 - **DP engine**: Pure TS in `runOptimization.ts`. Browser runs via `runOptimizationDelegated()` → `optimizationWorker.ts`. Falls back to sync `runOptimization()` when `Worker` is unavailable or the page is served on **`file://`**.
-- **Remote API** (no local backend): `http://45.146.4.98:8282`
+- **Remote API** (no local backend): `https://epias-data-provider.insposoft.com`
   - Browser base URL: `boboApiUrl()` in `src/data/api.ts` → `BOBO_API_BASE`
     - **Dev / `vite preview`:** `/api` (proxied to the backend in `vite.config.ts`)
-    - **Production build:** `http://45.146.4.98:8282` unless `VITE_BOBO_API_BASE` is set at build time
+    - **Production build:** the remote URL unless `VITE_BOBO_API_BASE` is set at build time
   - `GET /power-plants` → plant list. Payload normalized by `normalizePowerPlantsPayload()` in `formatUtils.ts` (top-level array, or `{ data }`, `{ power_plants }`, `{ plants }`).
   - `GET /power-plants/{id}/prices-and-generation?start_date=…&end_date=…` → `{ prices: number[], powers: number[] }` (`powers` mapped to internal `wind` series).
 - **No bundled default**: app starts with no series; user loads via EPİAŞ (`customData` state).
 - **Styling**: Hand-written CSS (`utilities.css` + `theme.css`). Google Fonts loaded from `index.html`.
-- **Deployment**: `vite preview --port 8484 --host 0.0.0.0` serves `./dist`; browser calls backend at `http://45.146.4.98:8282` directly (CORS-enabled). Node `>=20` in `package.json` (was `>=20 <23`; the cap was dropped; Node 22+ is supported).
+- **Deployment**: two paths. (1) `vite preview --port 8484 --host 0.0.0.0` serves `./dist`; the browser then calls the backend directly (CORS-enabled). (2) **Cloudflare Worker** (`worker/index.ts`, `wrangler.jsonc`): `wrangler deploy` serves `./dist` as static assets at `bataryaopt.insposoft.com` (SPA fallback via `not_found_handling`) and proxies `/api` to the backend — needed for that domain because `https://` pages would otherwise hit mixed-content on the plain-HTTP backend. Worker uses the backend via an `IP.sslip.io` hostname because Cloudflare Workers cannot `fetch()` raw IP literals. The backend URL appears in **four** places that must stay in sync: `vite.config.ts` (dev proxy), `src/data/api.ts` (prod base), `worker/index.ts` (worker proxy) — and recent commits changed all three together. Node `>=20` in `package.json` (was `>=20 <23`; the cap was dropped; Node 22+ is supported).
 
 ## Dispatch optimization (DP solver)
 
@@ -159,9 +160,8 @@ Plant loads set `chartEpochUtcMs` from `ymdToUtcMidnightMs(startDate)` (applied 
 
 - **Baseline** (0 MWh): plant-only revenue. Gross path = `Σ wind[t] × dt × price[t]` (no DP). Net path (`useNet` = region + OPEX present) = synthetic plant-only trajectory through `buildNetIncrementalBreakdown` so the zero-capacity point's uplift is exactly 0 (BESS NET === Plant NET at zero capacity by construction since BESS O&M mirrors Plant O&M).
 - **Scaled power** (`scalePower` checkbox): `chargeMax` / `dischargeMax` scale as `cap × baseChargeMax / baseCapacity` (and discharge analog); else fixed inverter limits from last optimize. `installedCapacityMW` (the grid export ceiling) stays fixed from `baseParams`.
-- **Marginal value**: `(uplift[i] − uplift[i−1]) / (capacity[i] − capacity[i−1])`. When `useNet` is true, `uplift` is already net (post-OPEX, post-transmission), so the marginal value is "net marginal value".
-- **Regime** (first vs last marginal, index 1 vs last): `ratio = endMarg/startMarg` — `> 0.85` **linear**, `> 0.10` **saturating**, else **saturated**.
-- **Sweet spot** (gross chart): highest `uplift / capacity` among positive sizes.
+- **Marginal benefit charts**: there is no successive-difference marginal series. The finance charts plot each point's per-MWh-annualised figures directly: `annualUplift` (levelised, labeled "annual marginal benefit") and `netAnnual` (post-OPEX when `useNet`).
+- **Net optimum**: sweep point with max **positive** `netAnnual` (`netOptimum`; null if none qualifies). The sweep callback payload (`sweepOptimalResult`) is built from the same argmax pass.
 
 ### Financial layer (no re-DP)
 
@@ -172,12 +172,11 @@ Uses sweep trajectory revenues and sidebar/applied economics (`appliedBatteryCos
 - **Fade NPV factor**: `Σ_{y=1..lifetime} (avg_retention[y] / (1+i)^y) × CRF` with `avg_retention = (curve[y−1]+curve[y])/2`.
 - **Annual uplift** = year-1 uplift × fade NPV factor.
 - **Net annual benefit** = annual uplift − annualised CAPEX.
-- **Simple payback** = CAPEX / year-1 uplift (∞ if year-1 uplift ≤ 0).
-- **Net optimum**: sweep point with max **positive** `netAnnual` (null if none).
+- **Simple payback** = CAPEX / annual uplift (∞ if annual uplift ≤ 0).
 
 ### Lifetime cash bridge
 
-At sweep point closest to sidebar `capacity`: year table (retention, nominal uplift, discount factor, PV, cumulative PV) plus fade / revenue bar charts in collapsible `<details>`.
+Anchor defaults to the **net-optimum** sweep point (`breakdownAnchorMode = 'optimal'`); a toggle falls back to the sweep point closest to the sidebar `capacity`. Year table (retention, nominal uplift, discount factor, PV, cumulative PV) plus fade / revenue bar charts in collapsible `<details>`. Caption explains the period→annualized→fade conversion so the year-1 table value reconciles with the KPI "Incremental revenue from BESS".
 
 ### Usage flow
 
@@ -197,7 +196,7 @@ Active series: `customData` only (null until loaded).
 |---|---|
 | **EPİAŞ plant** | `PowerPlantCombobox` + `PlantProvinceCombobox` (for regional tariffs) + **Quick range** select (`1w / 1m / 3m / 6m / 1y / 2y`) + manual start/end dates (max end = **yesterday**). Selecting a quick range populates start/end; editing the date inputs clears the quick selection. **Load EPİAŞ data** fetches series; user runs **Optimize dispatch**. |
 
-**There is no paste or file-upload path** in the current build — `parsePaste` / `FileUploadPanel` / drag-and-drop references are all stale. If you're adding manual data input, this is the obvious extension point in `DataInputCard` (`src/panels/dataInputPanels.tsx:276`).
+**There is no paste or file-upload path** in the current build. If you're adding manual data input, this is the obvious extension point in `DataInputCard` (`src/panels/dataInputPanels.tsx:276`).
 
 **PV mode** (orthogonal, inside `PvReconstructCard`): when ON, optimize trims to full days and may reconstruct clipped generation (see above).
 
@@ -207,7 +206,7 @@ The "**Load EPİAŞ data**" button is gated on `hasUnappliedChanges` (set to `fa
 
 ## Quirks
 
-- `.gitignore` exists at the repo root (`.env`, `.env.local`, `node_modules/`, `dist/`). `.env.example` is committed (template); `.env` and `.env.local` are gitignored and hold local-only `VITE_AUTH_USERS`.
+- `.gitignore` exists at the repo root (`.env`, `.env.local`, `node_modules/`, `dist/`, `.wrangler/`, `opencode.json`). `.env.example` is committed (template); `.env` and `.env.local` are gitignored and hold local-only `VITE_AUTH_USERS`.
 - ESM (`"type": "module"`). Node scripts use `tsx`.
 - `tsconfig.json`: `noEmit: true`, `"include": ["src", "scripts"]`. `tsconfig.node.json`: `vite.config.ts` + `scripts/**/*.ts`.
 - `dt` is fixed **1.0 h** per row in `app.tsx`.
