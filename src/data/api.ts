@@ -1,4 +1,4 @@
-const REMOTE_API = 'http://185.114.48.111:8282';
+const REMOTE_API = 'http://45.146.4.98:8282';
 
 /**
  * Base URL for bobo-api requests from the browser.

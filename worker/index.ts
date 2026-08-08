@@ -6,7 +6,7 @@ interface Env {
 // https://developers.cloudflare.com/workers/platform/known-issues/#fetch-to-ip-addresses).
 // sslip.io resolves "<a>.<b>.<c>.<d>.sslip.io" to that IP via DNS, so we use a
 // hostname instead of an IP literal in the outbound URL.
-const BACKEND_HOST = '185.114.48.111.sslip.io:8282';
+const BACKEND_HOST = '45.146.4.98.sslip.io:8282';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const boboApiTarget = 'http://185.114.48.111:8282';
+const boboApiTarget = 'http://45.146.4.98:8282';
 
 const boboApiProxy = {
   '/api': {

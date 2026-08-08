@@ -59,15 +59,15 @@ No `lint` / `format` / `typecheck` / `test` / `clean` npm scripts.
   - When `VITE_AUTH_USERS` is missing/empty, the login screen surfaces a "not configured" error.
   - **localStorage keys** (in `src/auth.ts`): `bataryaopt-auth` = `'1'` when logged in; `bataryaopt-auth-at` = last-activity ms (epoch). `touchActivity()` is throttled to 1 s. Manipulate via the auth helpers, not by writing these keys directly.
 - **DP engine**: Pure TS in `runOptimization.ts`. Browser runs via `runOptimizationDelegated()` → `optimizationWorker.ts`. Falls back to sync `runOptimization()` when `Worker` is unavailable or the page is served on **`file://`**.
-- **Remote API** (no local backend): `http://185.114.48.111:8282`
+- **Remote API** (no local backend): `http://45.146.4.98:8282`
   - Browser base URL: `boboApiUrl()` in `src/data/api.ts` → `BOBO_API_BASE`
     - **Dev / `vite preview`:** `/api` (proxied to the backend in `vite.config.ts`)
-    - **Production build:** `http://185.114.48.111:8282` unless `VITE_BOBO_API_BASE` is set at build time
+    - **Production build:** `http://45.146.4.98:8282` unless `VITE_BOBO_API_BASE` is set at build time
   - `GET /power-plants` → plant list. Payload normalized by `normalizePowerPlantsPayload()` in `formatUtils.ts` (top-level array, or `{ data }`, `{ power_plants }`, `{ plants }`).
   - `GET /power-plants/{id}/prices-and-generation?start_date=…&end_date=…` → `{ prices: number[], powers: number[] }` (`powers` mapped to internal `wind` series).
 - **No bundled default**: app starts with no series; user loads via EPİAŞ (`customData` state).
 - **Styling**: Hand-written CSS (`utilities.css` + `theme.css`). Google Fonts loaded from `index.html`.
-- **Deployment**: `vite preview --port 8484 --host 0.0.0.0` serves `./dist`; browser calls backend at `http://185.114.48.111:8282` directly (CORS-enabled). Node `>=20` in `package.json` (was `>=20 <23`; the cap was dropped; Node 22+ is supported).
+- **Deployment**: `vite preview --port 8484 --host 0.0.0.0` serves `./dist`; browser calls backend at `http://45.146.4.98:8282` directly (CORS-enabled). Node `>=20` in `package.json` (was `>=20 <23`; the cap was dropped; Node 22+ is supported).
 
 ## Dispatch optimization (DP solver)
 
